@@ -17,7 +17,8 @@ Two kinds of entry are deliberately dropped:
     would silently exclude all of them. Matching a sandboxed app needs its
     real binary, which the entry does not name.
   * Anything that resolves to a shell, since a prefix match on /usr/bin/bash
-    would catch most of the session.
+    would catch most of the session, and anything that runs as another user,
+    for the same reason.
   * Launcher stubs. Entries that go through hyprctl, uwsm, a terminal chooser
     or Omarchy's web-app handlers name the dispatcher, not the app, and the
     dispatcher has usually handed off to something else by the time the app
@@ -29,6 +30,7 @@ Prints [{"value": <path>, "label": <name>, "description": <path>}, ...].
 import json
 import os
 import shlex
+import stat
 import sys
 
 # Exec lines carry these placeholders for files and URLs; none survive here.
@@ -37,9 +39,9 @@ FIELD_CODES = {"%f", "%F", "%u", "%U", "%d", "%D", "%n", "%N",
 
 # Runners whose path says nothing about which app is being launched.
 SANDBOX_RUNNERS = {"flatpak", "snap", "flatpak-spawn"}
-SHELLS = {"sh", "bash", "zsh", "fish", "dash", "ksh", "tcsh", "env", "sudo",
-          "pkexec", "gtk-launch", "xdg-open"}
-DISPATCHERS = {"hyprctl", "uwsm", "xdg-terminal-exec", "systemd-run", "dbus-launch"}
+SHELLS = {"sh", "bash", "zsh", "fish", "dash", "ksh", "tcsh", "env",
+          "gtk-launch", "xdg-open"}
+DISPATCHERS = {"hyprctl", "uwsm", "xdg-terminal-exec", "dbus-launch"}
 DISPATCHER_PREFIXES = ("omarchy-launch-", "omarchy-webapp-handler-")
 
 
@@ -128,6 +130,10 @@ def resolve(program):
         return None
     candidate = os.path.realpath(candidate)
     if not os.path.isfile(candidate) or not os.access(candidate, os.X_OK):
+        return None
+    # A program that runs as another user is a wrapper around the real app,
+    # and a prefix match on it would catch everything launched through it.
+    if os.stat(candidate).st_mode & (stat.S_ISUID | stat.S_ISGID):
         return None
     return candidate
 

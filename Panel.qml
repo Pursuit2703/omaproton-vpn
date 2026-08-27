@@ -27,6 +27,51 @@ Panel {
   property int nudgeIndex: 0
   property int quickIndex: 0
   property int protectionIndex: 0
+
+  // Keyboard and mouse were fighting over the cursor. Moving with j or k
+  // scrolls the list, which slides a different row under a pointer that never
+  // moved; that row's hover then drags the cursor back to it and the view
+  // snaps to follow, so the list walks itself backwards and you key through
+  // the same rows again. Hover only counts once the pointer has actually
+  // moved. The shell's PointerMoveGate does this per row from
+  // onPositionChanged, which the shared Toggle and MultiSelect don't expose,
+  // so it's done once here for the whole panel instead.
+  property bool pointerMoved: false
+
+  function setCursorFromHover(section, index) {
+    if (!pointerMoved) return
+    setCursor(section, index)
+  }
+
+  // The Protection section grows by three rows when split tunneling is on,
+  // so its cursor length and the position of the sign-out row are computed
+  // rather than counted by hand. The caption under the app list carries no
+  // cursor of its own.
+  readonly property bool splitDetailVisible: vpn.splitActive
+  // The service and the dialog are private children of this panel; these are
+  // what a harness needs to check the Kill Switch actually moved, and that it
+  // asked first.
+  readonly property string vpnKs: vpn.config["kill-switch"] || ""
+  readonly property alias killSwitchDialog: killSwitchConfirm
+  readonly property int protectionCount: splitDetailVisible ? 7 : 5
+  readonly property int signOutIndex: protectionCount - 1
+
+  // App paths Proton's file already holds that the scan no longer finds, kept
+  // as options so an app removed from the system can still be unticked.
+  readonly property var splitStaleApps: {
+    var chosen = vpn.splitApps
+    var out = []
+    for (var i = 0; i < chosen.length; i++) {
+      var path = String(chosen[i])
+      var name = path.split("/").pop()
+      out.push({ value: path, label: name, description: path })
+    }
+    return out
+  }
+
+  onSplitDetailVisibleChanged: {
+    if (protectionIndex >= protectionCount) protectionIndex = protectionCount - 1
+  }
   property int recentIndex: 0
   property int countryIndex: 0
   property int serverIndex: 0
@@ -66,6 +111,7 @@ Panel {
   // switch off, which means a dropped tunnel silently exposes the user.
   readonly property bool nudgeVisible: vpn.signedIn && vpn.configLoaded && vpn.stateLoaded
                                        && !vpn.killSwitchOn && !vpn.nudgeDismissed
+                                       && !vpn.splitActive
 
   readonly property string heroMeta: {
     if (!vpn.installed) return vpn.installing ? "Installing…" : "Not installed"
@@ -97,7 +143,7 @@ Panel {
     list.push({ name: "quick", count: quickActions.length })
     list.push({ name: "tabs", count: tabs.length })
     if (tab === "protection") {
-      list.push({ name: "protection", count: 3 })
+      list.push({ name: "protection", count: protectionCount })
     } else {
       if (vpn.recents.length > 0) list.push({ name: "recents", count: vpn.recents.length })
       if (drilled) list.push({ name: "servers", count: serverRowCount })
@@ -202,6 +248,7 @@ Panel {
   }
 
   function moveCursor(dx, dy) {
+    pointerMoved = false
     cursorActive = true
     ensureCursor()
     if (dy !== 0) anchorPending = false
@@ -240,12 +287,16 @@ Panel {
     if (focusSection === "install") vpn.installCli()
     else if (focusSection === "signin") submitSignIn()
     else if (focusSection === "header") vpn.toggle()
-    else if (focusSection === "nudge") { if (nudgeIndex === 0) vpn.toggleKillSwitch(); else vpn.dismissNudge() }
+    else if (focusSection === "nudge") { if (nudgeIndex === 0) requestKillSwitch(); else vpn.dismissNudge() }
     else if (focusSection === "quick") runQuick(quickActions[quickIndex].key)
     else if (focusSection === "tabs") setTab(tabs[tabIndex].key)
     else if (focusSection === "protection") {
-      if (protectionIndex === 0) vpn.toggleKillSwitch()
+      if (protectionIndex === 0) requestKillSwitch()
       else if (protectionIndex === 1) vpn.toggleNetShield()
+      else if (protectionIndex === 2) vpn.toggleAutoConnect()
+      else if (protectionIndex === 3) vpn.toggleSplitTunnel()
+      else if (splitDetailVisible && protectionIndex === 4) splitModeRow.toggle()
+      else if (splitDetailVisible && protectionIndex === 5) splitAppsRow.toggle()
       else requestSignOut()
     }
     else if (focusSection === "recents") { vpn.connectRecent(recentIndex); showConnection() }
@@ -287,6 +338,15 @@ Panel {
     cursorActive = false
     focusSection = "header"
     if (panelFlick) panelFlick.contentY = 0
+  }
+
+  // Disconnected there is nothing to interrupt, so the change just happens.
+  // Connected, it costs a reconnect, and that is what the dialog is for.
+  function requestKillSwitch() {
+    if (vpn.splitActive) return
+    if (!vpn.connected) { vpn.toggleKillSwitch(); return }
+    killSwitchConfirm.selectedIndex = 0
+    killSwitchConfirm.opened = true
   }
 
   function requestSignOut() {
@@ -343,9 +403,10 @@ Panel {
     else if (focusSection === "countries") column = countryColumn
     else if (focusSection === "servers") column = serverColumn
     var i = sectionIndex(focusSection)
-    // The Protection column carries the Account header and rows after its two
-    // switches; the sign-out row is its last child.
-    if (focusSection === "protection" && i === 2 && column) i = column.children.length - 1
+    // The Protection column carries the Account header and rows after its
+    // switches; the sign-out row is its last child wherever the cursor for it
+    // has ended up.
+    if (focusSection === "protection" && i === signOutIndex && column) i = column.children.length - 1
     if (column && i >= 0 && i < column.children.length) scrollItemIntoView(column.children[i])
   }
 
@@ -430,6 +491,9 @@ Panel {
         connected: vpn.connected,
         busy: vpn.busy,
         killSwitch: vpn.config["kill-switch"] || "",
+        configPending: vpn.configPending,
+        splitTunneling: vpn.splitOn ? vpn.splitMode : "off",
+        splitApps: vpn.splitApps.length,
         netshield: vpn.config["netshield"] || "",
         countries: vpn.countries.length,
         recents: vpn.recents.length,
@@ -438,6 +502,13 @@ Panel {
         currentPlace: vpn.currentPlace ? vpn.currentPlace.city + ", " + vpn.currentPlace.code : "",
         stateLoaded: vpn.stateLoaded,
         nudgeDismissed: vpn.nudgeDismissed,
+        autoConnect: vpn.autoConnect,
+        autoReady: vpn.autoReady,
+        linkActive: vpn.linkActive,
+        statusConnected: vpn.statusConnected,
+        desired: vpn._desired,
+        autoWaitMs: Math.max(0, vpn._autoNextMs - Date.now()),
+        pinFailed: vpn._autoPinFailed,
         drilledInto: vpn.serversCountry,
         servers: vpn.servers.length,
         lastError: vpn.lastError
@@ -484,19 +555,76 @@ Panel {
       anchors.fill: parent
       // A text field owns the keyboard while it has focus, otherwise every
       // letter typed would drive the cursor instead of the input.
+      // An open Mode or Apps popup owns the keyboard while it is up, or hjkl
+      // would drive the cursor on the panel behind it, scrolling a list the
+      // person can't see instead of moving inside the one they opened.
       blocked: filterField.activeFocus || usernameField.activeFocus
+               || splitModeRow.popupOpen || splitAppsRow.popupOpen
       onMoveRequested: function(dx, dy) {
+        // A dialog with the screen dimmed behind it owns the keyboard, or the
+        // cursor would be moving around underneath it unseen.
+        if (killSwitchConfirm.opened) {
+          killSwitchConfirm.selectedIndex = killSwitchConfirm.selectedIndex === 0 ? 1 : 0
+          return
+        }
         if (!root.cursorActive) { root.cursorActive = true; return }
         root.moveCursor(dx, dy)
       }
-      onActivateRequested: if (root.cursorActive) root.activateCursor()
+      onActivateRequested: {
+        if (killSwitchConfirm.opened) {
+          if (killSwitchConfirm.selectedIndex === 0) killSwitchConfirm.canceled()
+          else killSwitchConfirm.confirmed()
+          return
+        }
+        if (root.cursorActive) root.activateCursor()
+      }
       // Inside a drill, escape backs out one level before it closes the panel.
-      onCloseRequested: root.drilled ? root.drillOut() : root.close()
+      onCloseRequested: {
+        if (killSwitchConfirm.opened) { killSwitchConfirm.canceled(); return }
+        root.drilled ? root.drillOut() : root.close()
+      }
       onTabRequested: function(direction) { root.switchPanel(direction) }
       // No single-letter actions on purpose: the panel takes keyboard focus
       // when it opens, and a stray keystroke must never change the tunnel.
       onTextKey: function(t) {
         if (t === "/") filterField.forceActiveFocus()
+      }
+
+      // What counts as the pointer actually moving. A row sliding under a
+      // still pointer reports a hover but moves no pointer, and this is how
+      // the panel tells the two apart. A handler rather than a MouseArea so
+      // it sees the movement without taking hover away from the rows.
+      HoverHandler {
+        property real lastX: -1
+        property real lastY: -1
+        onPointChanged: {
+          var pos = point.position
+          if (Math.abs(pos.x - lastX) > 1 || Math.abs(pos.y - lastY) > 1) {
+            lastX = pos.x
+            lastY = pos.y
+            root.pointerMoved = true
+          }
+        }
+      }
+
+      // Changing the Kill Switch means dropping the tunnel and putting it
+      // back, and for those seconds nothing is protected. That is a real cost
+      // and the person paying it should agree to it first, so this asks rather
+      // than doing it and narrating afterwards. Cancel is preselected: the
+      // safe answer should be the one an accidental Return gives you.
+      ConfirmDialog {
+        id: killSwitchConfirm
+        anchors.fill: parent
+        z: 100
+        message: (vpn.killSwitchOn ? "Turning the Kill Switch off" : "Turning the Kill Switch on")
+          + " needs the tunnel down. You'll be disconnected and reconnected to the same server, "
+          + "and until it comes back your traffic isn't protected."
+        cancelText: "Cancel"
+        confirmText: vpn.killSwitchOn ? "Turn off" : "Turn on"
+        foreground: root.foreground
+        fontFamily: root.fontFamily
+        onCanceled: opened = false
+        onConfirmed: { opened = false; vpn.toggleKillSwitch() }
       }
 
       Flickable {
@@ -616,7 +744,7 @@ Panel {
               title: vpn.installing ? "Installing Proton VPN CLI…" : "Install Proton VPN CLI"
               subtitle: vpn.installing ? "Finish the install in the terminal that opened" : "Opens a terminal: Omarchy handles the install"
               enabled: !vpn.installing
-              onEntered: root.setCursor("install", 0)
+              onEntered: root.setCursorFromHover("install", 0)
               onClicked: vpn.installCli()
             }
 
@@ -670,7 +798,7 @@ Panel {
               icon: "󰌆"
               title: "Sign in with Proton"
               subtitle: "Opens a terminal for your password and 2FA code"
-              onEntered: root.setCursor("signin", 0)
+              onEntered: root.setCursorFromHover("signin", 0)
               onClicked: root.submitSignIn()
             }
           }
@@ -755,12 +883,14 @@ Panel {
                 spacing: Style.space(8)
 
                 Button {
-                  text: vpn.configBusy ? "Turning on…" : "Turn on"
+                  // Held through the re-read too, so the button stops saying
+                  // "Turning on…" at the same moment the switch flips.
+                  text: vpn.configPending === "kill-switch" ? "Turning on…" : "Turn on"
                   bordered: true
                   foreground: root.foreground
                   hasCursor: root.cursorActive && root.focusSection === "nudge" && root.nudgeIndex === 0
-                  enabled: !vpn.configBusy
-                  onClicked: vpn.toggleKillSwitch()
+                  enabled: vpn.configPending === ""
+                  onClicked: root.requestKillSwitch()
                 }
 
                 Button {
@@ -806,7 +936,7 @@ Panel {
                   subtitle: modelData.hint
                   trailing: modelData.plus ? "PLUS" : ""
                   enabled: !vpn.busy
-                  onEntered: root.setCursor("quick", index)
+                  onEntered: root.setCursorFromHover("quick", index)
                   onClicked: root.runQuick(modelData.key)
                 }
               }
@@ -854,20 +984,32 @@ Panel {
               Toggle {
                 width: parent.width
                 label: "Kill Switch"
-                description: vpn.configLoaded ? "Block internet if the VPN drops" : "Loading…"
+                // Says what the click will cost before it is clicked: pausing
+                // split tunneling, or a reconnect, both of which used to be
+                // things you found out afterwards.
+                description: {
+                  var applying = vpn.configPendingLabel("kill-switch")
+                  if (applying !== "") return applying
+                  if (!vpn.configLoaded) return "Loading…"
+                  if (vpn.splitActive) return "Turn split tunneling off to use this"
+                  if (vpn.connected) return "Blocks internet if the VPN drops, changing it reconnects"
+                  return "Block internet if the VPN drops"
+                }
                 checked: vpn.killSwitchOn
-                enabled: vpn.configLoaded && !vpn.configBusy
+                enabled: vpn.configLoaded && vpn.configPending === "" && !vpn.splitActive
                 hasCursor: root.cursorActive && root.focusSection === "protection" && root.protectionIndex === 0
                 foreground: root.foreground
                 fontFamily: root.fontFamily
-                onHovered: function(on) { if (on) root.setCursor("protection", 0) }
-                onClicked: { root.clearHighlight(); vpn.toggleKillSwitch() }
+                onHovered: function(on) { if (on) root.setCursorFromHover("protection", 0) }
+                onClicked: { root.clearHighlight(); root.requestKillSwitch() }
               }
 
               Toggle {
                 width: parent.width
                 label: "NetShield"
                 description: {
+                  var applying = vpn.configPendingLabel("netshield")
+                  if (applying !== "") return applying
                   if (!vpn.configLoaded) return "Loading…"
                   var v = String(vpn.config["netshield"] || "off")
                   if (v === "malware-ads-trackers") return "Blocking malware, ads and trackers"
@@ -875,12 +1017,106 @@ Panel {
                   return "Block malware, ads and trackers"
                 }
                 checked: vpn.netShieldOn
-                enabled: vpn.configLoaded && !vpn.configBusy
+                enabled: vpn.configLoaded && vpn.configPending === ""
                 hasCursor: root.cursorActive && root.focusSection === "protection" && root.protectionIndex === 1
                 foreground: root.foreground
                 fontFamily: root.fontFamily
-                onHovered: function(on) { if (on) root.setCursor("protection", 1) }
+                onHovered: function(on) { if (on) root.setCursorFromHover("protection", 1) }
                 onClicked: { root.clearHighlight(); vpn.toggleNetShield() }
+              }
+
+              // Widget-owned, unlike the two above: the CLI has no setting for
+              // this, so it lives in the widget's own state file.
+              Toggle {
+                width: parent.width
+                label: "Always On"
+                description: "Reconnects on boot and interruptions"
+                checked: vpn.autoConnect
+                enabled: !vpn.busy
+                hasCursor: root.cursorActive && root.focusSection === "protection" && root.protectionIndex === 2
+                foreground: root.foreground
+                fontFamily: root.fontFamily
+                onHovered: function(on) { if (on) root.setCursorFromHover("protection", 2) }
+                onClicked: { root.clearHighlight(); vpn.toggleAutoConnect() }
+              }
+
+              // Proton skips split tunneling entirely while the kill switch
+              // is on, so the row says that instead of offering a switch that
+              // would look on and do nothing.
+              Toggle {
+                width: parent.width
+                label: "Split tunneling"
+                description: vpn.splitDescription()
+                checked: vpn.splitActive
+                enabled: vpn.splitAvailable && !vpn.splitBlocked
+                hasCursor: root.cursorActive && root.focusSection === "protection" && root.protectionIndex === 3
+                foreground: root.foreground
+                fontFamily: root.fontFamily
+                onHovered: function(on) { if (on) root.setCursorFromHover("protection", 3) }
+                onClicked: { root.clearHighlight(); vpn.toggleSplitTunnel() }
+              }
+
+              Dropdown {
+                id: splitModeRow
+                visible: root.splitDetailVisible
+                width: parent.width
+                label: "Mode"
+                value: vpn.splitMode
+                options: [
+                  { value: "exclude", label: "Exclude: chosen apps skip the VPN" },
+                  { value: "include", label: "Include: only chosen apps use the VPN" }
+                ]
+                hasCursor: root.cursorActive && root.focusSection === "protection" && root.protectionIndex === 4
+                foreground: root.foreground
+                fontFamily: root.fontFamily
+                onHovered: function(on) { if (on) root.setCursorFromHover("protection", 4) }
+                onChanged: function(value) { vpn.setSplitMode(value) }
+              }
+
+              // The list is scanned fresh each time the popup opens, so an app
+              // installed since the panel loaded is there without a restart.
+              // Paths already in Proton's file that no longer scan (an app
+              // that was removed) are added back as options, otherwise they
+              // could never be unticked.
+              MultiSelect {
+                id: splitAppsRow
+                visible: root.splitDetailVisible
+                width: parent.width
+                label: "Apps"
+                options: root.splitStaleApps
+                optionsCommand: ["python3", vpn.appsScriptPath]
+                placeholderText: "Search apps..."
+                emptyText: "No apps found"
+                noSelectionText: "None chosen"
+                hasCursor: root.cursorActive && root.focusSection === "protection" && root.protectionIndex === 5
+                foreground: root.foreground
+                fontFamily: root.fontFamily
+                onHovered: function(on) { if (on) root.setCursorFromHover("protection", 5) }
+                onChanged: function(values) { vpn.setSplitApps(values) }
+              }
+
+              // MultiSelect writes to its own `values` when a row is ticked,
+              // and that imperative write destroys a plain declarative
+              // binding: from the first tick on, the list would show what was
+              // clicked rather than what is in the file. The visible symptom
+              // was a mode switch leaving the previous mode's apps on screen
+              // while Proton had none, which reads as "it kept my apps" when
+              // the truth is the opposite. Binding reasserts itself every time
+              // the service's list changes, so the file stays the one source.
+              Binding {
+                target: splitAppsRow
+                property: "values"
+                value: vpn.splitApps
+              }
+
+              Text {
+                visible: root.splitDetailVisible
+                width: parent.width
+                text: "Restart each chosen app after connecting, or it keeps using the tunnel it started on."
+                color: Qt.darker(root.foreground, 1.5)
+                font.family: root.fontFamily
+                font.pixelSize: Style.font.caption
+                wrapMode: Text.WordWrap
               }
 
               // ── Account ─────────────────────────────────────────────────
@@ -900,12 +1136,12 @@ Panel {
 
               ActionRow {
                 width: parent.width
-                hasCursor: root.cursorActive && root.focusSection === "protection" && root.protectionIndex === 2
+                hasCursor: root.cursorActive && root.focusSection === "protection" && root.protectionIndex === root.signOutIndex
                 icon: "󰍃"
                 title: root.signOutArmed ? "Click again to sign out" : "Sign out"
                 subtitle: root.signOutArmed ? "Disconnects and clears the session on this computer" : "You'll need your password and 2FA to sign back in"
                 enabled: !vpn.busy
-                onEntered: root.setCursor("protection", 2)
+                onEntered: root.setCursorFromHover("protection", root.signOutIndex)
                 onClicked: root.requestSignOut()
               }
             }
@@ -938,7 +1174,7 @@ Panel {
                   title: modelData.title || ""
                   subtitle: modelData.subtitle || ""
                   enabled: !vpn.busy
-                  onEntered: root.setCursor("recents", index)
+                  onEntered: root.setCursorFromHover("recents", index)
                   onClicked: { vpn.connectRecent(index); root.showConnection() }
                 }
               }
@@ -1147,7 +1383,7 @@ Panel {
     active: root.tab === tabKey
     hasCursor: root.cursorActive && root.focusSection === "tabs" && root.tabIndex === tabIdx
 
-    onHovered: function(isHovered) { if (isHovered) root.setCursor("tabs", pill.tabIdx) }
+    onHovered: function(isHovered) { if (isHovered) root.setCursorFromHover("tabs", pill.tabIdx) }
     onClicked: root.setTab(tabKey)   // setTab clears the highlight
   }
 
@@ -1169,7 +1405,7 @@ Panel {
       hoverEnabled: true
       cursorShape: vpn.busy ? Qt.ArrowCursor : Qt.PointingHandCursor
       enabled: !vpn.busy
-      onEntered: root.setCursor("countries", countryRow.rowIndex)
+      onEntered: root.setCursorFromHover("countries", countryRow.rowIndex)
       onClicked: { root.clearHighlight(); root.drillInto(countryRow.country) }
     }
 
@@ -1251,7 +1487,7 @@ Panel {
       hoverEnabled: true
       cursorShape: vpn.busy ? Qt.ArrowCursor : Qt.PointingHandCursor
       enabled: !vpn.busy
-      onEntered: root.setCursor("servers", 0)
+      onEntered: root.setCursorFromHover("servers", 0)
       onClicked: { root.clearHighlight(); root.activateServerRow(0) }
     }
 
@@ -1328,7 +1564,7 @@ Panel {
       hoverEnabled: true
       cursorShape: vpn.busy ? Qt.ArrowCursor : Qt.PointingHandCursor
       enabled: !vpn.busy
-      onEntered: root.setCursor("servers", serverRow.rowIndex)
+      onEntered: root.setCursorFromHover("servers", serverRow.rowIndex)
       onClicked: { root.clearHighlight(); if (serverRow.server) root.activateServerRow(serverRow.rowIndex) }
     }
 

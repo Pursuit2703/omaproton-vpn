@@ -28,7 +28,10 @@ section:
 - Runs every command as an argument list, never through a shell, except the
   username handed to Omarchy's terminal launcher, which is allow-listed and
   quoted first.
-- Writes one file of its own (`~/.local/state/omarchy-protonvpn/state.json`).
+- Writes one file of its own (`~/.local/state/omarchy-protonvpn/state.json`,
+  owner-only) and, only when you change split tunneling, one section of
+  Proton's own `~/.config/Proton/VPN/settings.json`. Every other key in that
+  file is handed back exactly as found; the README lists the full rules.
 
 ## Trust boundary
 

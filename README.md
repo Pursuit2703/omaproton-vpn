@@ -366,6 +366,18 @@ widget doesn't freeze, it shows "Connecting to …" and optimistically flips the
 switch on. If the connect fails, the switch drops back and the reason is shown
 under the header for a few seconds.
 
+### Keyboard
+
+Everything in the panel is reachable with the keyboard. `hjkl` or the arrow
+keys move, Enter activates, Escape backs out one level and then closes, and `/`
+jumps to the country filter. Enter on **Mode** or **Apps** opens that picker,
+which then owns the keyboard: inside the Apps list typing filters it, arrows
+move, Enter ticks, and Escape closes it again.
+
+Hover only moves the selection when you actually move the pointer. Scrolling
+with the keyboard slides rows under a stationary mouse, and without that rule
+the row that lands under the pointer drags the selection back to itself.
+
 ## Settings
 
 Configurable from Omarchy's widget settings:

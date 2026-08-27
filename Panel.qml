@@ -28,6 +28,21 @@ Panel {
   property int quickIndex: 0
   property int protectionIndex: 0
 
+  // Keyboard and mouse were fighting over the cursor. Moving with j or k
+  // scrolls the list, which slides a different row under a pointer that never
+  // moved; that row's hover then drags the cursor back to it and the view
+  // snaps to follow, so the list walks itself backwards and you key through
+  // the same rows again. Hover only counts once the pointer has actually
+  // moved. The shell's PointerMoveGate does this per row from
+  // onPositionChanged, which the shared Toggle and MultiSelect don't expose,
+  // so it's done once here for the whole panel instead.
+  property bool pointerMoved: false
+
+  function setCursorFromHover(section, index) {
+    if (!pointerMoved) return
+    setCursor(section, index)
+  }
+
   // The Protection section grows by three rows when split tunneling is on,
   // so its cursor length and the position of the sign-out row are computed
   // rather than counted by hand. The caption under the app list carries no
@@ -233,6 +248,7 @@ Panel {
   }
 
   function moveCursor(dx, dy) {
+    pointerMoved = false
     cursorActive = true
     ensureCursor()
     if (dy !== 0) anchorPending = false
@@ -539,7 +555,11 @@ Panel {
       anchors.fill: parent
       // A text field owns the keyboard while it has focus, otherwise every
       // letter typed would drive the cursor instead of the input.
+      // An open Mode or Apps popup owns the keyboard while it is up, or hjkl
+      // would drive the cursor on the panel behind it, scrolling a list the
+      // person can't see instead of moving inside the one they opened.
       blocked: filterField.activeFocus || usernameField.activeFocus
+               || splitModeRow.popupOpen || splitAppsRow.popupOpen
       onMoveRequested: function(dx, dy) {
         // A dialog with the screen dimmed behind it owns the keyboard, or the
         // cursor would be moving around underneath it unseen.
@@ -568,6 +588,23 @@ Panel {
       // when it opens, and a stray keystroke must never change the tunnel.
       onTextKey: function(t) {
         if (t === "/") filterField.forceActiveFocus()
+      }
+
+      // What counts as the pointer actually moving. A row sliding under a
+      // still pointer reports a hover but moves no pointer, and this is how
+      // the panel tells the two apart. A handler rather than a MouseArea so
+      // it sees the movement without taking hover away from the rows.
+      HoverHandler {
+        property real lastX: -1
+        property real lastY: -1
+        onPointChanged: {
+          var pos = point.position
+          if (Math.abs(pos.x - lastX) > 1 || Math.abs(pos.y - lastY) > 1) {
+            lastX = pos.x
+            lastY = pos.y
+            root.pointerMoved = true
+          }
+        }
       }
 
       // Changing the Kill Switch means dropping the tunnel and putting it
@@ -707,7 +744,7 @@ Panel {
               title: vpn.installing ? "Installing Proton VPN CLI…" : "Install Proton VPN CLI"
               subtitle: vpn.installing ? "Finish the install in the terminal that opened" : "Opens a terminal: Omarchy handles the install"
               enabled: !vpn.installing
-              onEntered: root.setCursor("install", 0)
+              onEntered: root.setCursorFromHover("install", 0)
               onClicked: vpn.installCli()
             }
 
@@ -761,7 +798,7 @@ Panel {
               icon: "󰌆"
               title: "Sign in with Proton"
               subtitle: "Opens a terminal for your password and 2FA code"
-              onEntered: root.setCursor("signin", 0)
+              onEntered: root.setCursorFromHover("signin", 0)
               onClicked: root.submitSignIn()
             }
           }
@@ -899,7 +936,7 @@ Panel {
                   subtitle: modelData.hint
                   trailing: modelData.plus ? "PLUS" : ""
                   enabled: !vpn.busy
-                  onEntered: root.setCursor("quick", index)
+                  onEntered: root.setCursorFromHover("quick", index)
                   onClicked: root.runQuick(modelData.key)
                 }
               }
@@ -963,7 +1000,7 @@ Panel {
                 hasCursor: root.cursorActive && root.focusSection === "protection" && root.protectionIndex === 0
                 foreground: root.foreground
                 fontFamily: root.fontFamily
-                onHovered: function(on) { if (on) root.setCursor("protection", 0) }
+                onHovered: function(on) { if (on) root.setCursorFromHover("protection", 0) }
                 onClicked: { root.clearHighlight(); root.requestKillSwitch() }
               }
 
@@ -984,7 +1021,7 @@ Panel {
                 hasCursor: root.cursorActive && root.focusSection === "protection" && root.protectionIndex === 1
                 foreground: root.foreground
                 fontFamily: root.fontFamily
-                onHovered: function(on) { if (on) root.setCursor("protection", 1) }
+                onHovered: function(on) { if (on) root.setCursorFromHover("protection", 1) }
                 onClicked: { root.clearHighlight(); vpn.toggleNetShield() }
               }
 
@@ -999,7 +1036,7 @@ Panel {
                 hasCursor: root.cursorActive && root.focusSection === "protection" && root.protectionIndex === 2
                 foreground: root.foreground
                 fontFamily: root.fontFamily
-                onHovered: function(on) { if (on) root.setCursor("protection", 2) }
+                onHovered: function(on) { if (on) root.setCursorFromHover("protection", 2) }
                 onClicked: { root.clearHighlight(); vpn.toggleAutoConnect() }
               }
 
@@ -1015,7 +1052,7 @@ Panel {
                 hasCursor: root.cursorActive && root.focusSection === "protection" && root.protectionIndex === 3
                 foreground: root.foreground
                 fontFamily: root.fontFamily
-                onHovered: function(on) { if (on) root.setCursor("protection", 3) }
+                onHovered: function(on) { if (on) root.setCursorFromHover("protection", 3) }
                 onClicked: { root.clearHighlight(); vpn.toggleSplitTunnel() }
               }
 
@@ -1032,7 +1069,7 @@ Panel {
                 hasCursor: root.cursorActive && root.focusSection === "protection" && root.protectionIndex === 4
                 foreground: root.foreground
                 fontFamily: root.fontFamily
-                onHovered: function(on) { if (on) root.setCursor("protection", 4) }
+                onHovered: function(on) { if (on) root.setCursorFromHover("protection", 4) }
                 onChanged: function(value) { vpn.setSplitMode(value) }
               }
 
@@ -1054,7 +1091,7 @@ Panel {
                 hasCursor: root.cursorActive && root.focusSection === "protection" && root.protectionIndex === 5
                 foreground: root.foreground
                 fontFamily: root.fontFamily
-                onHovered: function(on) { if (on) root.setCursor("protection", 5) }
+                onHovered: function(on) { if (on) root.setCursorFromHover("protection", 5) }
                 onChanged: function(values) { vpn.setSplitApps(values) }
               }
 
@@ -1104,7 +1141,7 @@ Panel {
                 title: root.signOutArmed ? "Click again to sign out" : "Sign out"
                 subtitle: root.signOutArmed ? "Disconnects and clears the session on this computer" : "You'll need your password and 2FA to sign back in"
                 enabled: !vpn.busy
-                onEntered: root.setCursor("protection", root.signOutIndex)
+                onEntered: root.setCursorFromHover("protection", root.signOutIndex)
                 onClicked: root.requestSignOut()
               }
             }
@@ -1137,7 +1174,7 @@ Panel {
                   title: modelData.title || ""
                   subtitle: modelData.subtitle || ""
                   enabled: !vpn.busy
-                  onEntered: root.setCursor("recents", index)
+                  onEntered: root.setCursorFromHover("recents", index)
                   onClicked: { vpn.connectRecent(index); root.showConnection() }
                 }
               }
@@ -1368,7 +1405,7 @@ Panel {
       hoverEnabled: true
       cursorShape: vpn.busy ? Qt.ArrowCursor : Qt.PointingHandCursor
       enabled: !vpn.busy
-      onEntered: root.setCursor("countries", countryRow.rowIndex)
+      onEntered: root.setCursorFromHover("countries", countryRow.rowIndex)
       onClicked: { root.clearHighlight(); root.drillInto(countryRow.country) }
     }
 
@@ -1450,7 +1487,7 @@ Panel {
       hoverEnabled: true
       cursorShape: vpn.busy ? Qt.ArrowCursor : Qt.PointingHandCursor
       enabled: !vpn.busy
-      onEntered: root.setCursor("servers", 0)
+      onEntered: root.setCursorFromHover("servers", 0)
       onClicked: { root.clearHighlight(); root.activateServerRow(0) }
     }
 
@@ -1527,7 +1564,7 @@ Panel {
       hoverEnabled: true
       cursorShape: vpn.busy ? Qt.ArrowCursor : Qt.PointingHandCursor
       enabled: !vpn.busy
-      onEntered: root.setCursor("servers", serverRow.rowIndex)
+      onEntered: root.setCursorFromHover("servers", serverRow.rowIndex)
       onClicked: { root.clearHighlight(); if (serverRow.server) root.activateServerRow(serverRow.rowIndex) }
     }
 

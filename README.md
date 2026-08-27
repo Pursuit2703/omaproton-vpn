@@ -199,9 +199,28 @@ Two switches saved to Proton's own settings:
   Without this, a dropped tunnel silently falls back to your plain connection
   and all you'd see is the icon dimming. The CLI ships with it **off**: which is
   why the panel offers to turn it on the first time you sign in.
+
+  The Kill Switch and split tunneling can't both be on, because Proton ignores
+  split tunneling whenever the Kill Switch is on. Each row locks the other and
+  says which one to turn off, so you never have to know the rule.
+
+  Proton won't change this setting while a tunnel is up, so if you flip it
+  while connected the widget drops the tunnel, makes the change, and puts you
+  back on the same server. It asks first, in a dialog, because your traffic
+  isn't protected until the tunnel is back and that's your call to make, not
+  something to be told about afterwards. Cancel is preselected. Disconnected
+  there's nothing to interrupt, so it just changes. That takes as long as a normal connect, and the row
+  says "Turning on…" the whole way through. Always On is held off in the
+  middle, otherwise it would reconnect into the gap and the change would fail.
+  If anything goes wrong, you end up back on the VPN with the setting
+  unchanged, never stranded off it.
 - **NetShield**: blocks malware, ads, and trackers at the DNS level. On a free
   plan Proton only allows malware blocking; the widget steps down to that
   automatically.
+
+- **Split tunneling**: pick apps that skip the VPN, or flip it round so only
+  the apps you pick use it. See below, it has more rules attached than the
+  other two.
 
 And one saved by the widget itself, because the CLI has no setting for it:
 
@@ -224,6 +243,47 @@ And one saved by the widget itself, because the CLI has no setting for it:
   will never open a sign-in terminal on its own. And while it's on, the
   **Disconnect** button won't keep you disconnected, you'll be reconnected
   within a few seconds; switch Always On off if you want to stay off.
+
+#### Split tunneling
+
+Turn it on and two more rows appear: **Mode**, and the **Apps** list.
+
+- **Exclude** (the default) sends the apps you pick out through your normal
+  connection, everything else stays on the VPN. Good for a bank that blocks
+  VPN IPs, or a device on your own network.
+- **Include** is the mirror image: only the apps you pick go through the VPN
+  and everything else uses your normal connection.
+
+The Apps list is every desktop app on the machine that the widget can point at
+a real program on disk. Search it, tick what you want, untick to remove.
+
+Four things to know, all of them Proton's behaviour rather than the widget's:
+
+- **It needs the Kill Switch off.** Proton skips split tunneling entirely while
+  the Kill Switch is on, so the row says so and stays locked until you turn the
+  Kill Switch off. The switch shows off while that's true, because nothing is
+  being split, and it stays off when you turn the Kill Switch back off. Your
+  app lists are kept either way, so turning it back on is one click. Neither
+  switch ever turns itself on. Changing the Kill Switch needs you disconnected first, so
+  the order is: disconnect, Kill Switch off, set up split tunneling, connect.
+  It's a real trade, a tunnel with holes in it can't also promise nothing
+  leaks when it drops.
+- **Restart your apps after connecting.** Proton tags an app's connections as
+  they're made, so anything already running when the tunnel came up keeps using
+  it until you restart it. Proton's own app tells you the same thing.
+- **Apps only, no IP ranges.** Proton's settings file has a field for IP ranges
+  but nothing on Linux reads it yet, so the widget doesn't offer one rather
+  than write a setting that does nothing.
+- **IPv4 only.** Proton tags IPv4 connections and nothing else, so an app you
+  excluded still uses the VPN for anything it sends over IPv6, and in Include
+  mode an app you left out still uses the VPN over IPv6. If you need an
+  exclusion to be absolute, `protonvpn config set ipv6 off` stops the tunnel
+  carrying IPv6 at all and apps fall back to IPv4, where it works. When you
+  test this, check with `curl -4`, otherwise you may be looking at a path
+  split tunneling never touches.
+- **Flatpaks and Snaps aren't listed.** They all launch through one shared
+  runner, so picking one would pick all of them. Same for anything that
+  launches through a terminal chooser or a web-app handler.
 
 Below the switches, **Account** shows who's signed in and the plan, with a
 **Sign out** row, it asks for a second click within five seconds, because
@@ -342,9 +402,11 @@ Omarchy plugin. It:
 - reads Proton's server cache read-only (city list, coordinates, and the map's
   connected-city lookup all come from it), reads the tunnel's byte counters
   under `/sys/class/net/` once a second while the panel is open, and writes
-  exactly one file of its own
+  one file of its own
   (`~/.local/state/omarchy-protonvpn/state.json`: recent location labels,
   whether you dismissed the Kill Switch prompt, and whether Always On is on)
+- writes one file that isn't its own, and only if you turn split tunneling on:
+  `~/.config/Proton/VPN/settings.json`, Proton's own settings. Rules below.
 
 **Sign-in.** Your password and 2FA code go straight to the `protonvpn` CLI's
 own prompt in a terminal; this plugin never sees them. The username you type in
@@ -358,6 +420,25 @@ terminal runs non-interactively, so nothing lands in your shell history.
 `protonvpn config set`. The widget will only ever pass `kill-switch` ∈
 `{off, standard}` and `netshield` ∈ `{off, malware-only, malware-ads-trackers}`;
 no other key or value can reach the CLI from this code.
+
+**Writing Proton's settings file.** Split tunneling is the one feature with no
+CLI command behind it, so the widget edits `~/.config/Proton/VPN/settings.json`
+itself. What that means in practice:
+
+- It only ever happens when you change something under Split tunneling.
+  Nothing is written on start-up, on a poll, or when you connect.
+- The file is read fresh, only `features.split_tunneling` is changed, and every
+  other key is handed back exactly as found. A diff before and after a change
+  shows the app list and nothing else.
+- If the file is missing or unreadable, nothing is written and the row says
+  "Sign in and connect once first". The widget never creates it.
+- App paths only ever come from the widget's own scan of installed apps, and
+  anything that isn't an absolute path is dropped rather than repaired.
+- Writes are atomic (written aside, then renamed into place), so an interrupted
+  write can't leave you with half a settings file.
+- Nothing is written while the Kill Switch is on, since Proton would ignore it,
+  and nothing is written while a `protonvpn config set` is still running, so
+  the two can't land on the file at once.
 
 **What's visible to other processes.** Omarchy exposes every plugin over a
 Quickshell IPC socket under `/run/user/<uid>/`, which only your own user (and

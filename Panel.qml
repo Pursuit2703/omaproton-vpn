@@ -1383,7 +1383,7 @@ Panel {
     active: root.tab === tabKey
     hasCursor: root.cursorActive && root.focusSection === "tabs" && root.tabIndex === tabIdx
 
-    onHovered: function(isHovered) { if (isHovered) root.setCursor("tabs", pill.tabIdx) }
+    onHovered: function(isHovered) { if (isHovered) root.setCursorFromHover("tabs", pill.tabIdx) }
     onClicked: root.setTab(tabKey)   // setTab clears the highlight
   }
 

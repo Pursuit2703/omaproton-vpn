@@ -618,7 +618,7 @@ Item {
 
   function connectCountry(code, name) {
     var c = String(code || "").trim().toUpperCase()
-    if (c === "") return
+    if (!/^[A-Z]{2}$/.test(c)) return
     var title = name || c
     connectTo(["--country", c], "Connecting to " + title + "…",
               { key: "country:" + c, title: title, subtitle: "Fastest server", args: ["--country", c] })
@@ -629,7 +629,8 @@ Item {
   // country are only for the label people see.
   function connectServer(name, city, countryName) {
     var n = String(name || "").trim()
-    if (n === "") return
+    // A name, never a flag: connectArg allows a leading dash for `--country`.
+    if (!connectArg.test(n) || n.charAt(0) === "-") return
     var title = city || n
     var subtitle = [countryName, n].filter(function(s) { return s }).join(" · ")
     connectTo([n], "Connecting to " + title + "…",
@@ -644,7 +645,7 @@ Item {
 
   function loadServers(code, name) {
     var c = String(code || "").trim().toUpperCase()
-    if (!installed || c === "" || serversProcess.running) return
+    if (!installed || !/^[A-Z]{2}$/.test(c) || serversProcess.running) return
     serversCountry = c
     serversCountryName = name || c
     servers = []
@@ -821,10 +822,27 @@ Item {
   }
 
 
+  // The only argv a recent may carry: `--country US`, `--p2p`, or a server
+  // name like US-TX#572. The state file is plain JSON under $HOME, so it is
+  // checked on the way in rather than trusted on the way to `protonvpn
+  // connect`. Anything that doesn't fit is dropped, not repaired.
+  readonly property var connectArg: /^[A-Za-z0-9#-]{1,64}$/
+
+  function cleanRecent(r) {
+    if (!r || typeof r !== "object" || typeof r.key !== "string" || !Array.isArray(r.args)) return null
+    var args = []
+    for (var i = 0; i < r.args.length && i < 4; i++) {
+      var a = String(r.args[i])
+      if (!connectArg.test(a)) return null
+      args.push(a)
+    }
+    return { key: r.key, title: String(r.title || ""), subtitle: String(r.subtitle || ""), args: args }
+  }
+
   function applyState(text) {
     try {
       var s = JSON.parse(String(text || "{}"))
-      recents = Array.isArray(s.recents) ? s.recents.slice(0, 3) : []
+      recents = Array.isArray(s.recents) ? s.recents.slice(0, 3).map(cleanRecent).filter(Boolean) : []
       nudgeDismissed = s.killSwitchNudgeDismissed === true
       autoConnect = s.autoConnect === true
     } catch (e) {
@@ -881,7 +899,9 @@ Item {
   }
 
   Component.onCompleted: {
-    Quickshell.execDetached(["mkdir", "-p", stateDir])
+    // Owner-only, and fixed up on existing installs too: the file holds where
+    // you've been connecting, which is nobody else's business on a shared box.
+    Quickshell.execDetached(["install", "-d", "-m", "700", stateDir])
     refresh()
   }
 

@@ -42,6 +42,20 @@ into the CLI's own prompt, and Proton's client owns the session from there.
 
 <img src="docs/panel.png" width="360" alt="The OmaProton VPN panel: world map, connection details, live traffic, quick connect">
 
+## Contents
+
+- [New to Proton?](#new-to-proton)
+- [What you need](#what-you-need)
+- [Install](#install), [Update](#update), [Remove](#remove)
+- [How to use it](#how-to-use-it): the bar icon, the map, quick connect,
+  countries and cities, traffic, [keyboard](#keyboard)
+- [How the protections work](#how-the-protections-work): Kill Switch,
+  NetShield, Always On, split tunneling, and
+  [why the first and last can't both be on](#why-the-kill-switch-and-split-tunneling-cant-both-be-on)
+- [Settings](#settings)
+- [Security and privacy](#security-and-privacy)
+- [Notes](#notes), [Credits](#credits), [License](#license)
+
 ## New to Proton?
 
 You don't need to be a Proton customer to use this. Proton VPN has a **free
@@ -131,14 +145,10 @@ protected; dimmed means not.
 | Action | What it does |
 | --- | --- |
 | Left-click | Open the panel |
-| Right-click | Toggle, connect to the fastest server, or disconnect |
+| Right-click | Toggle: connect to the fastest server, or disconnect |
 | Middle-click | Force a status refresh |
 
-The panel is keyboard-driven too: arrow keys move through every section, `Enter`
-activates, `→` opens a country's city list, `←` backs out, `Esc` backs out of a
-city list or closes the panel. `/` jumps to the country filter. There are no
-single-letter shortcuts on purpose, a stray keystroke should never change your
-connection.
+The panel is fully keyboard-driven too; see [Keyboard](#keyboard).
 
 ### The map
 
@@ -183,115 +193,13 @@ Rows marked **PLUS** need a paid plan. On a free plan they fail with a clear
 ### Two tabs: Connections and Protection
 
 Under Quick Connect sit two tabs, in the same pill style as Omarchy's network
-panel. **Connections** holds everywhere you can go, recent places, the
-country and city lists, and saved profiles when they land. **Protection**
-holds everything about *how* you're protected, the Kill Switch, NetShield,
-Always On, and the settings still to come (split tunneling). The tab you
-pick stays until you close the panel.
+panel. **Connections** holds everywhere you can go: recent places, and the
+country and city lists. **Protection** holds everything about *how* you're
+protected: the Kill Switch, NetShield, Always On, split tunneling, and your
+account. The tab you pick stays until you close the panel.
 
-### Protection
-
-<img src="docs/protection.png" width="360" alt="The Protection tab: Kill Switch and NetShield switches, account, and sign out">
-
-Two switches saved to Proton's own settings:
-
-- **Kill Switch**: if the VPN drops, your internet is blocked until it's back.
-  Without this, a dropped tunnel silently falls back to your plain connection
-  and all you'd see is the icon dimming. The CLI ships with it **off**: which is
-  why the panel offers to turn it on the first time you sign in.
-
-  The Kill Switch and split tunneling can't both be on, because Proton ignores
-  split tunneling whenever the Kill Switch is on. Each row locks the other and
-  says which one to turn off, so you never have to know the rule.
-
-  Proton won't change this setting while a tunnel is up, so if you flip it
-  while connected the widget drops the tunnel, makes the change, and puts you
-  back on the same server. It asks first, in a dialog, because your traffic
-  isn't protected until the tunnel is back and that's your call to make, not
-  something to be told about afterwards. Cancel is preselected. Disconnected
-  there's nothing to interrupt, so it just changes. That takes as long as a normal connect, and the row
-  says "Turning on…" the whole way through. Always On is held off in the
-  middle, otherwise it would reconnect into the gap and the change would fail.
-  If anything goes wrong, you end up back on the VPN with the setting
-  unchanged, never stranded off it.
-- **NetShield**: blocks malware, ads, and trackers at the DNS level. On a free
-  plan Proton only allows malware blocking; the widget steps down to that
-  automatically.
-
-- **Split tunneling**: pick apps that skip the VPN, or flip it round so only
-  the apps you pick use it. See below, it has more rules attached than the
-  other two.
-
-And one saved by the widget itself, because the CLI has no setting for it:
-
-- **Always On**: whenever Proton isn't connected, connect it. That covers
-  booting, logging in, joining a café Wi-Fi, and a tunnel that drops on its own,
-  they're all just moments when you aren't protected and should be. It's
-  checked on the same few-second poll that drives the bar icon, so there's
-  nothing extra running. **Off by default.**
-
-  It reconnects to the top of your **Recent** list, which is the server you
-  were last actually on. If that server is full or gone, the attempt fails
-  once and the next one falls back to Fastest, so it can't get stuck retrying
-  a server that isn't coming back. With nothing in Recent yet it just uses
-  Fastest. Never a Plus-only target, so a free account isn't sent somewhere
-  it can't go. A connect that fails waits 30 seconds before trying again, so
-  a dead network, or a café portal you haven't signed into yet, doesn't get
-  hammered.
-
-  Two things worth knowing. It never fires while you're signed out, and it
-  will never open a sign-in terminal on its own. And while it's on, the
-  **Disconnect** button won't keep you disconnected, you'll be reconnected
-  within a few seconds; switch Always On off if you want to stay off.
-
-#### Split tunneling
-
-Turn it on and two more rows appear: **Mode**, and the **Apps** list.
-
-- **Exclude** (the default) sends the apps you pick out through your normal
-  connection, everything else stays on the VPN. Good for a bank that blocks
-  VPN IPs, or a device on your own network.
-- **Include** is the mirror image: only the apps you pick go through the VPN
-  and everything else uses your normal connection.
-
-The Apps list is every desktop app on the machine that the widget can point at
-a real program on disk. Search it, tick what you want, untick to remove.
-
-Four things to know, all of them Proton's behaviour rather than the widget's:
-
-- **It needs the Kill Switch off.** Proton skips split tunneling entirely while
-  the Kill Switch is on, so the row says so and stays locked until you turn the
-  Kill Switch off. The switch shows off while that's true, because nothing is
-  being split, and it stays off when you turn the Kill Switch back off. Your
-  app lists are kept either way, so turning it back on is one click. Neither
-  switch ever turns itself on. Changing the Kill Switch needs you disconnected first, so
-  the order is: disconnect, Kill Switch off, set up split tunneling, connect.
-  It's a real trade, a tunnel with holes in it can't also promise nothing
-  leaks when it drops.
-- **Restart your apps after connecting.** Proton tags an app's connections as
-  they're made, so anything already running when the tunnel came up keeps using
-  it until you restart it. Proton's own app tells you the same thing.
-- **Apps only, no IP ranges.** Proton's settings file has a field for IP ranges
-  but nothing on Linux reads it yet, so the widget doesn't offer one rather
-  than write a setting that does nothing.
-- **IPv4 only.** Proton tags IPv4 connections and nothing else, so an app you
-  excluded still uses the VPN for anything it sends over IPv6, and in Include
-  mode an app you left out still uses the VPN over IPv6. If you need an
-  exclusion to be absolute, `protonvpn config set ipv6 off` stops the tunnel
-  carrying IPv6 at all and apps fall back to IPv4, where it works. When you
-  test this, check with `curl -4`, otherwise you may be looking at a path
-  split tunneling never touches.
-- **Flatpaks and Snaps aren't listed.** They all launch through one shared
-  runner, so picking one would pick all of them. Same for anything that
-  launches through a terminal chooser or a web-app handler.
-
-Below the switches, **Account** shows who's signed in and the plan, with a
-**Sign out** row, it asks for a second click within five seconds, because
-signing out also disconnects.
-
-If the VPN does drop unexpectedly, you also get a desktop notification,
-"Proton VPN disconnected, You're no longer protected." Turn notifications off
-in the widget's settings if you'd rather not.
+The Protection tab has enough rules behind it to deserve its own chapter:
+[How the protections work](#how-the-protections-work).
 
 ### Connections → Recent
 
@@ -316,13 +224,13 @@ Inside a country:
 
 - **"Fastest in &lt;country&gt;"** is always the first row. It lets Proton choose
   any server in that country, which is the same as `protonvpn connect --country`.
-- **Every row below is one city**: showing the best server there right now with
-  its current load and any tags, **Free** for free-plan servers, plus P2P, Tor,
+- **Every row below is one city**, showing the best server there right now with
+  its current load and any tags: **Free** for free-plan servers, plus P2P, Tor,
   or Streaming. Cities are ordered by Proton's own speed score, best first.
 
 The widget shows one row per city rather than one per server on purpose. Large
 countries have thousands of servers and the nearest city would monopolise the
-whole list, you'd scroll past hundreds of near-identical entries before seeing
+whole list; you'd scroll past hundreds of near-identical entries before seeing
 a second city. When you pick a city, it connects to that city's best server; if
 you want a *specific* server, use the CLI: `protonvpn connect US-NY#12`.
 
@@ -350,8 +258,8 @@ moment behind.
 While you're connected, under the details: download and upload rates, a
 60-second sparkline, and the session's totals and uptime. Download is the
 filled area with a solid line; upload is the dashed line. Both are drawn in
-your theme's foreground, one ink, like the rest of the panel, and told
-apart by shape, not colour, so they read the same on every theme and for
+your theme's foreground, one ink, like the rest of the panel, and told apart
+by shape, not colour, so they read the same on every theme and for
 colour-blind eyes. Hover the sparkline to read the values at any second.
 
 The numbers come from the kernel's own counters for the tunnel interface
@@ -362,21 +270,200 @@ when you're not looking.
 ### While a connect is in progress
 
 `protonvpn connect` blocks for anywhere from a few seconds to a minute. The
-widget doesn't freeze, it shows "Connecting to …" and optimistically flips the
+widget doesn't freeze: it shows "Connecting to …" and optimistically flips the
 switch on. If the connect fails, the switch drops back and the reason is shown
 under the header for a few seconds.
 
 ### Keyboard
 
-Everything in the panel is reachable with the keyboard. `hjkl` or the arrow
-keys move, Enter activates, Escape backs out one level and then closes, and `/`
-jumps to the country filter. Enter on **Mode** or **Apps** opens that picker,
-which then owns the keyboard: inside the Apps list typing filters it, arrows
-move, Enter ticks, and Escape closes it again.
+Everything in the panel is reachable without a mouse.
+
+| Key | What it does |
+| --- | --- |
+| `↑` `↓` or `k` `j` | Move through every section, top to bottom |
+| `→` or `l` | Open the selected country's city list |
+| `←` or `h` | Back out to the country list |
+| `Enter` | Activate: connect, flip a switch, open a picker |
+| `Esc` | Back out one level, then close the panel |
+| `/` | Jump to the country filter |
+
+There are no single-letter shortcuts on purpose: the panel takes keyboard
+focus when it opens, and a stray keystroke should never change your
+connection.
+
+`Enter` on **Mode** or **Apps** opens that picker, which then owns the
+keyboard: inside the Apps list, typing filters it, arrows move, `Enter` ticks,
+and `Esc` closes it again. The Kill Switch dialog works the same way: arrows
+move between Cancel and confirm, `Enter` chooses, `Esc` cancels.
 
 Hover only moves the selection when you actually move the pointer. Scrolling
 with the keyboard slides rows under a stationary mouse, and without that rule
-the row that lands under the pointer drags the selection back to itself.
+the row that lands under the pointer would drag the selection back to itself.
+
+## How the protections work
+
+<img src="docs/protection.png" width="360" alt="The Protection tab: Kill Switch, NetShield, Always On and split tunneling switches, the Mode and Apps pickers, account, and sign out">
+
+Four switches, three owners. Knowing who owns each one explains most of how
+they behave:
+
+| Switch | Saved by | Where | Needs |
+| --- | --- | --- | --- |
+| **Kill Switch** | Proton CLI (`protonvpn config set`) | Proton's settings | Tunnel down to change |
+| **NetShield** | Proton CLI (`protonvpn config set`) | Proton's settings | Plus plan for ads and trackers |
+| **Always On** | This widget | `~/.local/state/omarchy-protonvpn/state.json` | Nothing |
+| **Split tunneling** | This widget, editing Proton's file | `~/.config/Proton/VPN/settings.json` | Kill Switch off |
+
+### Kill Switch
+
+If the VPN drops, your internet is blocked until it's back. Without it, a
+dropped tunnel silently falls back to your plain connection and all you'd see
+is the icon dimming. The CLI ships with it **off**, which is why the panel
+offers to turn it on the first time you sign in. Say yes; it's the setting
+that makes the others matter.
+
+Proton implements it in NetworkManager, below any app, so it holds even if the
+Proton client itself crashes. It also keeps an IPv6 leak guard active
+independently of the tunnel.
+
+### NetShield
+
+Blocks malware, ads, and trackers at the DNS level, on Proton's side. Three
+levels: off, malware only, or malware plus ads and trackers. The switch asks
+for the full level; on a free plan Proton only allows malware blocking, and
+the widget steps down to that automatically instead of failing.
+
+### Always On
+
+Whenever Proton isn't connected, connect it. That covers booting, logging in,
+joining a café Wi-Fi, and a tunnel that drops on its own: they're all just
+moments when you aren't protected and should be. It's checked on the same
+few-second poll that drives the bar icon, so there's nothing extra running.
+**Off by default.**
+
+It reconnects to the top of your **Recent** list, which is the server you were
+last actually on. If that server is full or gone, the attempt fails once and
+the next one falls back to Fastest, so it can't get stuck retrying a server
+that isn't coming back. With nothing in Recent yet it just uses Fastest. A
+connect that fails waits 30 seconds before trying again, so a dead network, or
+a café portal you haven't signed into yet, doesn't get hammered.
+
+Two things worth knowing:
+
+- It never fires while you're signed out, and it will never open a sign-in
+  terminal on its own.
+- While it's on, **Disconnect** won't keep you disconnected; you'll be
+  reconnected within a few seconds. Switch Always On off if you want to stay
+  off.
+
+Always On and the Kill Switch are different answers to the same question.
+The Kill Switch stops traffic leaking *while* the tunnel is down; Always On
+makes the tunnel come *back*. Together they close the gap from both sides:
+nothing leaks, and you're not stuck offline.
+
+### Split tunneling
+
+Turn it on and two more rows appear: **Mode**, and the **Apps** list.
+
+- **Exclude** (the default) sends the apps you pick out through your normal
+  connection; everything else stays on the VPN. Good for a bank that blocks
+  VPN IPs, or a device on your own network.
+- **Include** is the mirror image: only the apps you pick go through the VPN,
+  and everything else uses your normal connection.
+
+The Apps list is every desktop app on the machine that the widget can point at
+a real program on disk. Search it, tick what you want, untick to remove. Each
+mode remembers its own list, so switching modes doesn't lose either one.
+
+How Proton does it, so the caveats make sense: while split tunneling is
+active, Proton's system service watches every program you start and tags the
+connections of the ones you picked (and anything they launch) so the kernel
+routes them around the tunnel, or through it in Include mode. Which is why:
+
+- **Restart your apps after connecting.** Connections are tagged as they're
+  made, so anything already running when the tunnel came up keeps using it
+  until you restart it. Proton's own app tells you the same thing.
+- **Apps only, no IP ranges.** Proton's settings file has a field for IP ranges
+  but nothing on Linux reads it yet, so the widget doesn't offer one rather
+  than write a setting that does nothing.
+- **IPv4 only.** Proton tags IPv4 connections and nothing else, so an app you
+  excluded still uses the VPN for anything it sends over IPv6, and in Include
+  mode an app you left out still uses the VPN over IPv6. If you need an
+  exclusion to be absolute, `protonvpn config set ipv6 off` stops the tunnel
+  carrying IPv6 at all and apps fall back to IPv4, where it works. When you
+  test this, check with `curl -4`, otherwise you may be looking at a path
+  split tunneling never touches.
+- **Flatpaks and Snaps aren't listed.** They all launch through one shared
+  runner, so picking one would pick all of them. Same for anything that
+  launches through a terminal chooser or a web-app handler.
+
+### Why the Kill Switch and split tunneling can't both be on
+
+Because Proton ignores split tunneling whenever the Kill Switch is on. That's
+not a limitation the widget could hide; it's the rule Proton's own service
+follows, and it makes sense once you see the two as a trade:
+
+- The **Kill Switch** promises that if the tunnel drops, *nothing* leaks.
+- **Split tunneling** deliberately punches holes in the tunnel for the apps you
+  chose.
+
+A tunnel with holes in it can't also promise nothing leaks, so Proton picks
+the stricter one and skips the other. What the widget does with that:
+
+- Each row **locks the other** and says which one to turn off. With the Kill
+  Switch on, the Split tunneling row reads "Turn the Kill Switch off to use
+  this". With split tunneling on, the Kill Switch row reads "Turn split
+  tunneling off to use this". You never have to know the rule to get past it.
+- The switches **tell the truth**. If the Kill Switch is on, the Split
+  tunneling switch shows *off*, because nothing is being split, whatever the
+  setting says underneath. It stays off when you turn the Kill Switch back
+  off, and your app lists are kept, so bringing it back is one click. Neither
+  switch ever turns itself on.
+- So the order, if you want split tunneling, is: **Kill Switch off, then split
+  tunneling on**. And when you're done: **split tunneling off, then Kill
+  Switch back on**. The panel walks you through both.
+
+### Changing the Kill Switch while connected
+
+<img src="docs/kill-switch-dialog.png" width="360" alt="The confirmation dialog: turning the Kill Switch off needs the tunnel down, with Cancel preselected">
+
+Proton refuses to change the Kill Switch while a tunnel is up, so a switch you
+could only use while disconnected wouldn't be much of a switch. If you flip it
+while connected, the widget does the whole thing for you: drops the tunnel,
+makes the change, and puts you back on the same server.
+
+That gap is the one moment your traffic isn't protected, so the widget **asks
+first**, in a dialog, with Cancel preselected; an accidental `Enter` does
+nothing. Disconnected, there's nothing to interrupt, so the change just
+happens. The row says "Turning on…" or "Turning off…" the whole way through,
+and Always On is held off in the middle, otherwise it would reconnect into the
+gap and the change would fail. If anything goes wrong, you end up back on the
+VPN with the setting unchanged, never stranded off it.
+
+### Which setup do I want?
+
+| You want | Kill Switch | Split tunneling | Always On |
+| --- | --- | --- | --- |
+| Everything private, always. The default recommendation. | On | Off | On |
+| Everything private, except one app that refuses to work over a VPN | Off | Exclude that app | On |
+| Only one app private (a torrent client, a browser for one site) | Off | Include that app | Your call |
+| Nothing automatic; I connect by hand | Off | Off | Off |
+
+Note the second and third rows have the Kill Switch off, because they have to.
+If that one app is a bank that blocks VPN IPs, consider whether a second
+browser profile without the VPN is a better fit than a hole in the tunnel.
+
+### Account and sign out
+
+Below the switches, **Account** shows who's signed in and the plan, with a
+**Sign out** row. It asks for a second click within five seconds, because
+signing out also disconnects.
+
+### Notifications
+
+If the VPN drops unexpectedly you get a desktop notification, "Proton VPN
+disconnected, You're no longer protected." Connecting shows "Protected" with
+the server. Turn both off in the widget's settings if you'd rather not.
 
 ## Settings
 

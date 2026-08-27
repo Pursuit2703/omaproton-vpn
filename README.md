@@ -302,7 +302,7 @@ the row that lands under the pointer would drag the selection back to itself.
 
 ## How the protections work
 
-<img src="docs/protection.png" width="360" alt="The Protection tab: Kill Switch, NetShield, Always On and split tunneling switches, the Mode and Apps pickers, account, and sign out">
+<img src="docs/protection-tab.png" width="360" alt="The Protection tab: Kill Switch, NetShield, Always On and split tunneling switches, the Mode and Apps pickers, account, and sign out">
 
 Four switches, three owners. Knowing who owns each one explains most of how
 they behave:
@@ -425,7 +425,7 @@ the stricter one and skips the other. What the widget does with that:
 
 ### Changing the Kill Switch while connected
 
-<img src="docs/kill-switch-dialog.png" width="360" alt="The confirmation dialog: turning the Kill Switch off needs the tunnel down, with Cancel preselected">
+<img src="docs/kill-switch-confirm.png" width="360" alt="The confirmation dialog: turning the Kill Switch off needs the tunnel down, with Cancel preselected">
 
 Proton refuses to change the Kill Switch while a tunnel is up, so a switch you
 could only use while disconnected wouldn't be much of a switch. If you flip it

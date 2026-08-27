@@ -51,17 +51,37 @@ def read_cache():
         return None
 
 
-def usable(s):
+def status_known(data):
+    """Whether Status carries any information in this cache.
+
+    Proton fills Status in from a *separate* "loads" refresh
+    (`Status = 1 if server_load.enabled else 0` in its own types.py). Until
+    that call has succeeded, or when it fails, every server in the file reads
+    Status 0. That means "we don't know yet", not "all 18,000 servers are
+    down", and taking it literally empties the map and every city list.
+
+    So Status is honoured only when at least one server is marked up.
+    """
+    for s in data.get("LogicalServers") or []:
+        if s.get("Status") == 1:
+            return True
+    return False
+
+
+def usable(s, check_status=True):
     """Connectable, and not Secure Core (those are reached via --securecore)."""
-    return s.get("Status") == 1 and not ((s.get("Features") or 0) & SECURE_CORE)
+    if check_status and s.get("Status") != 1:
+        return False
+    return not ((s.get("Features") or 0) & SECURE_CORE)
 
 
 def all_cities(data):
     """Every city worldwide: one entry per (country, city) with its coordinates
     and best server. Feeds the panel's mini-map; ~200 rows for ~18k servers."""
     out = {}
+    check_status = status_known(data)
     for s in data.get("LogicalServers") or []:
-        if not usable(s):
+        if not usable(s, check_status):
             continue
         loc = s.get("Location") or {}
         lat, lon = loc.get("Lat"), loc.get("Long")
@@ -132,9 +152,11 @@ def main():
 
     # city -> best server seen so far, plus a count of that city's servers.
     cities = {}
+    check_status = status_known(data)
     for s in data.get("LogicalServers") or []:
-        # Status 0 means the server is under maintenance, not connectable.
-        if s.get("Status") != 1:
+        # Status 0 means under maintenance, but only once we know Status has
+        # been populated at all: see status_known().
+        if check_status and s.get("Status") != 1:
             continue
         if (s.get("ExitCountry") or "").upper() != code:
             continue

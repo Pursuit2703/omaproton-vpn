@@ -161,6 +161,41 @@ function parseActiveVpn(raw) {
   return { active: false, name: "", server: "", device: "", type: "" }
 }
 
+// `protonvpn connect` prints "Connected to NL#42 in Amsterdam, Netherlands."
+// on success, but not always first: with an expired server list the CLI
+// prints "Server list is outdated, updating..." ahead of it. So the line is
+// searched for, never assumed to be line 0. Returns "" when there isn't one.
+function connectedLine(raw) {
+  var lines = stripAnsi(raw).split("\n")
+  for (var i = 0; i < lines.length; i++) {
+    var line = lines[i].trim()
+    if (/^connected to\s+\S/i.test(line)) return line
+  }
+  return ""
+}
+
+// That line is the only place a Fastest/Random/P2P connect names the server it
+// actually landed on, so it's what lets those show up in Recent alongside
+// cities picked by hand.
+function parseConnected(raw) {
+  var line = connectedLine(raw)
+  if (line === "") return null
+  var m = line.match(/connected to\s+(.+?)\s*\.?\s*$/i)
+  if (!m) return null
+  var rest = m[1]
+  var name = serverName(rest)
+  if (name === "") return null
+  var location = serverLocation(rest)
+  var city = location
+  var country = ""
+  var comma = location.lastIndexOf(",")
+  if (comma > 0) {
+    city = location.substring(0, comma).trim()
+    country = location.substring(comma + 1).trim()
+  }
+  return { name: name, city: city, country: country }
+}
+
 function filterCountries(countries, query) {
   var q = String(query || "").trim().toLowerCase()
   if (q === "") return countries

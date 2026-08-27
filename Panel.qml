@@ -97,7 +97,7 @@ Panel {
     list.push({ name: "quick", count: quickActions.length })
     list.push({ name: "tabs", count: tabs.length })
     if (tab === "protection") {
-      list.push({ name: "protection", count: 3 })
+      list.push({ name: "protection", count: 4 })
     } else {
       if (vpn.recents.length > 0) list.push({ name: "recents", count: vpn.recents.length })
       if (drilled) list.push({ name: "servers", count: serverRowCount })
@@ -246,6 +246,7 @@ Panel {
     else if (focusSection === "protection") {
       if (protectionIndex === 0) vpn.toggleKillSwitch()
       else if (protectionIndex === 1) vpn.toggleNetShield()
+      else if (protectionIndex === 2) vpn.toggleAutoConnect()
       else requestSignOut()
     }
     else if (focusSection === "recents") { vpn.connectRecent(recentIndex); showConnection() }
@@ -343,9 +344,9 @@ Panel {
     else if (focusSection === "countries") column = countryColumn
     else if (focusSection === "servers") column = serverColumn
     var i = sectionIndex(focusSection)
-    // The Protection column carries the Account header and rows after its two
-    // switches; the sign-out row is its last child.
-    if (focusSection === "protection" && i === 2 && column) i = column.children.length - 1
+    // The Protection column carries the Account header and rows after its
+    // three switches; the sign-out row is its last child.
+    if (focusSection === "protection" && i === 3 && column) i = column.children.length - 1
     if (column && i >= 0 && i < column.children.length) scrollItemIntoView(column.children[i])
   }
 
@@ -430,6 +431,7 @@ Panel {
         connected: vpn.connected,
         busy: vpn.busy,
         killSwitch: vpn.config["kill-switch"] || "",
+        configPending: vpn.configPending,
         netshield: vpn.config["netshield"] || "",
         countries: vpn.countries.length,
         recents: vpn.recents.length,
@@ -438,6 +440,13 @@ Panel {
         currentPlace: vpn.currentPlace ? vpn.currentPlace.city + ", " + vpn.currentPlace.code : "",
         stateLoaded: vpn.stateLoaded,
         nudgeDismissed: vpn.nudgeDismissed,
+        autoConnect: vpn.autoConnect,
+        autoReady: vpn.autoReady,
+        linkActive: vpn.linkActive,
+        statusConnected: vpn.statusConnected,
+        desired: vpn._desired,
+        autoWaitMs: Math.max(0, vpn._autoNextMs - Date.now()),
+        pinFailed: vpn._autoPinFailed,
         drilledInto: vpn.serversCountry,
         servers: vpn.servers.length,
         lastError: vpn.lastError
@@ -755,11 +764,13 @@ Panel {
                 spacing: Style.space(8)
 
                 Button {
-                  text: vpn.configBusy ? "Turning on…" : "Turn on"
+                  // Held through the re-read too, so the button stops saying
+                  // "Turning on…" at the same moment the switch flips.
+                  text: vpn.configPending === "kill-switch" ? "Turning on…" : "Turn on"
                   bordered: true
                   foreground: root.foreground
                   hasCursor: root.cursorActive && root.focusSection === "nudge" && root.nudgeIndex === 0
-                  enabled: !vpn.configBusy
+                  enabled: vpn.configPending === ""
                   onClicked: vpn.toggleKillSwitch()
                 }
 
@@ -854,9 +865,10 @@ Panel {
               Toggle {
                 width: parent.width
                 label: "Kill Switch"
-                description: vpn.configLoaded ? "Block internet if the VPN drops" : "Loading…"
+                description: vpn.configPendingLabel("kill-switch")
+                  || (vpn.configLoaded ? "Block internet if the VPN drops" : "Loading…")
                 checked: vpn.killSwitchOn
-                enabled: vpn.configLoaded && !vpn.configBusy
+                enabled: vpn.configLoaded && vpn.configPending === ""
                 hasCursor: root.cursorActive && root.focusSection === "protection" && root.protectionIndex === 0
                 foreground: root.foreground
                 fontFamily: root.fontFamily
@@ -868,6 +880,8 @@ Panel {
                 width: parent.width
                 label: "NetShield"
                 description: {
+                  var applying = vpn.configPendingLabel("netshield")
+                  if (applying !== "") return applying
                   if (!vpn.configLoaded) return "Loading…"
                   var v = String(vpn.config["netshield"] || "off")
                   if (v === "malware-ads-trackers") return "Blocking malware, ads and trackers"
@@ -875,12 +889,27 @@ Panel {
                   return "Block malware, ads and trackers"
                 }
                 checked: vpn.netShieldOn
-                enabled: vpn.configLoaded && !vpn.configBusy
+                enabled: vpn.configLoaded && vpn.configPending === ""
                 hasCursor: root.cursorActive && root.focusSection === "protection" && root.protectionIndex === 1
                 foreground: root.foreground
                 fontFamily: root.fontFamily
                 onHovered: function(on) { if (on) root.setCursor("protection", 1) }
                 onClicked: { root.clearHighlight(); vpn.toggleNetShield() }
+              }
+
+              // Widget-owned, unlike the two above: the CLI has no setting for
+              // this, so it lives in the widget's own state file.
+              Toggle {
+                width: parent.width
+                label: "Always On"
+                description: "Reconnects on boot and interruptions"
+                checked: vpn.autoConnect
+                enabled: !vpn.busy
+                hasCursor: root.cursorActive && root.focusSection === "protection" && root.protectionIndex === 2
+                foreground: root.foreground
+                fontFamily: root.fontFamily
+                onHovered: function(on) { if (on) root.setCursor("protection", 2) }
+                onClicked: { root.clearHighlight(); vpn.toggleAutoConnect() }
               }
 
               // ── Account ─────────────────────────────────────────────────
@@ -900,12 +929,12 @@ Panel {
 
               ActionRow {
                 width: parent.width
-                hasCursor: root.cursorActive && root.focusSection === "protection" && root.protectionIndex === 2
+                hasCursor: root.cursorActive && root.focusSection === "protection" && root.protectionIndex === 3
                 icon: "󰍃"
                 title: root.signOutArmed ? "Click again to sign out" : "Sign out"
                 subtitle: root.signOutArmed ? "Disconnects and clears the session on this computer" : "You'll need your password and 2FA to sign back in"
                 enabled: !vpn.busy
-                onEntered: root.setCursor("protection", 2)
+                onEntered: root.setCursor("protection", 3)
                 onClicked: root.requestSignOut()
               }
             }

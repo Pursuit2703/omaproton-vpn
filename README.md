@@ -186,14 +186,14 @@ Under Quick Connect sit two tabs, in the same pill style as Omarchy's network
 panel. **Connections** holds everywhere you can go, recent places, the
 country and city lists, and saved profiles when they land. **Protection**
 holds everything about *how* you're protected, the Kill Switch, NetShield,
-and the settings still to come (split tunneling, auto-connect). The tab you
+Always On, and the settings still to come (split tunneling). The tab you
 pick stays until you close the panel.
 
 ### Protection
 
 <img src="docs/protection.png" width="360" alt="The Protection tab: Kill Switch and NetShield switches, account, and sign out">
 
-Two switches, saved to Proton's own settings:
+Two switches saved to Proton's own settings:
 
 - **Kill Switch**: if the VPN drops, your internet is blocked until it's back.
   Without this, a dropped tunnel silently falls back to your plain connection
@@ -202,6 +202,28 @@ Two switches, saved to Proton's own settings:
 - **NetShield**: blocks malware, ads, and trackers at the DNS level. On a free
   plan Proton only allows malware blocking; the widget steps down to that
   automatically.
+
+And one saved by the widget itself, because the CLI has no setting for it:
+
+- **Always On**: whenever Proton isn't connected, connect it. That covers
+  booting, logging in, joining a café Wi-Fi, and a tunnel that drops on its own,
+  they're all just moments when you aren't protected and should be. It's
+  checked on the same few-second poll that drives the bar icon, so there's
+  nothing extra running. **Off by default.**
+
+  It reconnects to the top of your **Recent** list, which is the server you
+  were last actually on. If that server is full or gone, the attempt fails
+  once and the next one falls back to Fastest, so it can't get stuck retrying
+  a server that isn't coming back. With nothing in Recent yet it just uses
+  Fastest. Never a Plus-only target, so a free account isn't sent somewhere
+  it can't go. A connect that fails waits 30 seconds before trying again, so
+  a dead network, or a café portal you haven't signed into yet, doesn't get
+  hammered.
+
+  Two things worth knowing. It never fires while you're signed out, and it
+  will never open a sign-in terminal on its own. And while it's on, the
+  **Disconnect** button won't keep you disconnected, you'll be reconnected
+  within a few seconds; switch Always On off if you want to stay off.
 
 Below the switches, **Account** shows who's signed in and the plan, with a
 **Sign out** row, it asks for a second click within five seconds, because
@@ -215,6 +237,12 @@ in the widget's settings if you'd rather not.
 
 The last three places you connected to, pinned above the country list. Most
 people use the same two or three locations forever; this makes them one click.
+
+Every successful connection lands here, including **Fastest**, **Random**,
+**P2P**, **Secure Core** and **Tor**. Those don't name a destination when you
+click them, but they still put you somewhere, so the server they picked is
+recorded by name and city, and clicking it again takes you straight back.
+That top entry is also what Always On reconnects to.
 
 ### Connections → Countries and cities
 
@@ -315,8 +343,8 @@ Omarchy plugin. It:
   connected-city lookup all come from it), reads the tunnel's byte counters
   under `/sys/class/net/` once a second while the panel is open, and writes
   exactly one file of its own
-  (`~/.local/state/omarchy-protonvpn/state.json`: recent location labels and
-  whether you dismissed the Kill Switch prompt)
+  (`~/.local/state/omarchy-protonvpn/state.json`: recent location labels,
+  whether you dismissed the Kill Switch prompt, and whether Always On is on)
 
 **Sign-in.** Your password and 2FA code go straight to the `protonvpn` CLI's
 own prompt in a terminal; this plugin never sees them. The username you type in
@@ -335,7 +363,9 @@ no other key or value can reach the CLI from this code.
 Quickshell IPC socket under `/run/user/<uid>/`, which only your own user (and
 root) can reach. Through it, any process running as you can call this widget's
 `connect`, `disconnect`, `status`, and `debug` methods, the same things that
-process could already do by running `protonvpn` directly. `status` returns the
+process could already do by running `protonvpn` directly. Note that while
+Always On is enabled, an IPC `disconnect` is undone within a few seconds, same
+as the button. `status` returns the
 server name; `debug` deliberately omits your account email. The email is shown
 only inside the panel.
 

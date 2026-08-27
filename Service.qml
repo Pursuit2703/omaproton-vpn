@@ -102,6 +102,30 @@ Item {
   property var recents: []
   property bool nudgeDismissed: false
   property bool stateLoaded: false
+
+  // ── Always On ───────────────────────────────────────────────────────────
+  // One invariant, not a set of triggers: if the switch is on and the tunnel
+  // isn't up, bring it up. Signing in, joining a network and a dropped tunnel
+  // are all just moments when that stops being true, so the nmcli poll that
+  // already runs for the bar icon is the whole mechanism. No second watcher,
+  // no second process, nothing to keep in sync.
+  //
+  // The CLI has no always-on mode of its own, and NetworkManager can't own it
+  // either: the CLI re-creates its WireGuard profile on every connect, so an
+  // NM autoconnect flag would only fight it.
+  property bool autoConnect: false
+  // Set when an automatic connect fails, so the next attempt falls back to
+  // Fastest instead of retrying a server that is full or gone, forever.
+  property bool _autoPinFailed: false
+  // Don't retry a failed connect on the very next poll: `protonvpn connect`
+  // against a dead network fails slowly and there is no point hammering it.
+  readonly property int autoRetryMs: 30000
+  property real _autoNextMs: 0
+  // True while the in-flight connect was started by the reconciler rather
+  // than a click, so only its failures arm the retry delay.
+  property bool _autoAttempt: false
+
+  readonly property bool autoReady: installed && signedIn && accountProbed && stateLoaded && autoConnect
   readonly property string stateDir: (Quickshell.env("XDG_STATE_HOME") || (Quickshell.env("HOME") + "/.local/state")) + "/omarchy-protonvpn"
   readonly property string statePath: stateDir + "/state.json"
 
@@ -118,13 +142,59 @@ Item {
   property bool _expectDown: false
   // What the in-flight connect was asked for, recorded to recents on success.
   property var _target: null
+  // When the last action finished, and when the in-flight link poll started.
+  // A poll that began before the action ended carries pre-action data, so it
+  // must not be used to decide whether the action took effect.
+  property real _actionEndedMs: 0
+  property real _watchStartedMs: 0
   property string _configKey: ""
   property string _configValue: ""
 
   readonly property bool connected: _desired === -1 ? (linkActive || statusConnected) : (_desired === 1)
   readonly property bool busy: actionProcess.running || connectProcess.running
+
+  // Every `protonvpn` call is a fresh Python process that loads, and may
+  // rewrite, Proton's shared 24MB server cache. The CLI takes no lock on it:
+  // two processes refreshing at once can race and leave every server in that
+  // file marked down, at which point the CLI refuses to pick a server at all
+  // ("No servers found matching criteria") until the list is refetched, which
+  // it will not do while its own copy looks fresh.
+  //
+  // So the read-only probes take turns, and stand aside while an action the
+  // person asked for is running. Actions are already serialized by `busy`.
+  // This also cuts a connect from ~9-15 CLI processes down to one.
+  // Deliberately a plain flag, not a binding over the Process objects. A
+  // binding does not re-evaluate between two statements of the same function,
+  // so refresh()'s `refreshStatus(); refreshAccount();` would both read "not
+  // busy" and start together: exactly the pair that raced and corrupted the
+  // cache. This is set the instant a probe launches and cleared when it exits.
+  property bool _probeRunning: false
+  readonly property bool cliBusy: _probeRunning || busy
+  // One flag per probe that stepped aside, so each is retried rather than
+  // lost. Deliberately not a single shared flag: the two frequent probes
+  // (status, info) always have work to do, so a shared flag lets them take
+  // the slot forever and starve the country and config loads.
+  property bool _wantStatus: false
+  property bool _wantAccount: false
+  property bool _wantCountries: false
+  property bool _wantConfig: false
+  readonly property bool _probesPending: _wantStatus || _wantAccount || _wantCountries || _wantConfig
   readonly property bool refreshing: statusProcess.running
-  readonly property bool configBusy: setConfigProcess.running
+  // Which config key is mid-change, "" when nothing is, and the value it's
+  // heading for. A click costs two CLI runs, `config set` then the `config
+  // list` re-read that confirms it, about 1.4s of CLI startup between them,
+  // and the switch can't move until the second lands. Rather than throw the
+  // knob early and hope, the row keeps showing the value the CLI last
+  // reported and says what it's doing, the same way displayStatus says
+  // "Connecting…". Cleared by the re-read, so it covers both runs.
+  property string configPending: ""
+  property string configPendingValue: ""
+
+  // "" unless that row is the one mid-change.
+  function configPendingLabel(key) {
+    if (configPending !== key) return ""
+    return configPendingValue === "off" ? "Turning off…" : "Turning on…"
+  }
 
   readonly property int refreshIntervalSec: intSetting("refreshIntervalSec", 30, 5, 3600)
   readonly property int watchIntervalSec: intSetting("watchIntervalSec", 4, 2, 60)
@@ -164,8 +234,11 @@ Item {
       return
     }
     watchLink()
-    refreshStatus()
+    // Account first: `signedIn` gates the map, the tabs and every setting, so
+    // probing it before the detail rows is what stops the panel looking empty
+    // for the first few seconds after a shell restart.
     refreshAccount()
+    refreshStatus()
   }
 
   function probeInstalled() {
@@ -191,42 +264,66 @@ Item {
 
   function watchLink() {
     if (watchProcess.running) return
+    _watchStartedMs = Date.now()
     watchProcess.command = ["nmcli", "-t", "-f", "NAME,TYPE,DEVICE,STATE", "connection", "show", "--active"]
     watchProcess.running = true
   }
 
   function refreshStatus() {
-    if (!installed || statusProcess.running) return
+    if (!installed) return
+    if (cliBusy) { _wantStatus = true; return }
+    _probeRunning = true
     statusProcess.command = ["protonvpn", "status"]
     statusProcess.running = true
   }
 
   function refreshAccount() {
-    if (!installed || accountProcess.running) return
+    if (!installed) return
+    if (cliBusy) { _wantAccount = true; return }
+    _probeRunning = true
     accountProcess.command = ["protonvpn", "info"]
     accountProcess.running = true
   }
 
   function loadCountries(force) {
-    if (!installed || !signedIn || countriesProcess.running) return
+    if (!installed || !signedIn) return
     if (countriesLoaded && force !== true) return
+    if (cliBusy) { _wantCountries = true; return }
+    _probeRunning = true
     countriesProcess.command = ["protonvpn", "countries", "list"]
     countriesProcess.running = true
   }
 
   function loadConfig() {
-    if (!installed || !signedIn || configProcess.running) return
+    // Nothing left to wait for, and no re-read coming to clear it.
+    if (!installed || !signedIn) { configPending = ""; configPendingValue = ""; return }
+    if (cliBusy) { _wantConfig = true; return }
+    _probeRunning = true
     configProcess.command = ["protonvpn", "config", "list"]
     configProcess.running = true
   }
 
   // Both key and value must be in configValues; anything else is dropped.
+  //
+  // Refuses while a change is still settling, so a second click (or an Enter
+  // from the keyboard cursor, which doesn't go through the row's `enabled`)
+  // can't send a contradicting `config set` at a value the panel hasn't been
+  // told about yet.
   function setConfig(key, value) {
+    if (configPending !== "" || setConfigProcess.running) return
+    applyConfig(key, value)
+  }
+
+  // The set itself, without the in-flight guard, so the NetShield step-down
+  // below can hand off from one failed attempt straight into the next.
+  function applyConfig(key, value) {
     var allowed = configValues[key]
     if (!allowed || allowed.indexOf(value) === -1) return
-    if (!installed || !signedIn || setConfigProcess.running) return
+    if (!installed || !signedIn) return
     _configKey = key
     _configValue = value
+    configPending = key
+    configPendingValue = value
     lastError = ""
     setConfigProcess.command = ["protonvpn", "config", "set", key, value]
     setConfigProcess.running = true
@@ -258,8 +355,9 @@ Item {
 
   // target: {key, title, subtitle, args} recorded to recents on success, or
   // null for quick actions that are already one click away.
-  function connectTo(args, label, target) {
+  function connectTo(args, label, target, auto) {
     if (!installed || !signedIn || busy) return
+    _autoAttempt = auto === true
     _desired = 1
     _expectDown = false
     _target = target
@@ -440,30 +538,90 @@ Item {
     reconcile()
   }
 
+  // Drop the optimistic override as soon as the world agrees with it, and
+  // also once the action that set it has finished, whatever the outcome.
+  //
+  // That second condition is not belt-and-braces. The override says "ignore
+  // reality, this is where we're heading", and it used to be released only on
+  // agreement. Always On can bring the tunnel straight back up as a
+  // disconnect completes, so reality settles on the opposite of what was
+  // asked, the two never agree, and the override latches for the rest of the
+  // session: the panel reads "Not protected" over a live tunnel and the power
+  // button starts connecting instead of disconnecting.
+  //
+  // Both callers run this against freshly polled state (nmcli in the link
+  // watcher, `protonvpn status` in applyStatus), so releasing on !busy hands
+  // the UI back to an observation, never to a stale one.
   // Drop the optimistic override as soon as the world agrees with it.
+  //
+  // It deliberately does NOT release while reality disagrees: during a connect
+  // the link poll can still be reporting the old state, and releasing on that
+  // flashes "Not protected" over a connect that is succeeding.
   function reconcile() {
     if (_desired === -1) return
     var real = linkActive || statusConnected
     if (real === (_desired === 1)) {
       _desired = -1
       pendingLabel = ""
+      return
+    }
+    // Safety valve only, never part of a normal connect or disconnect. If the
+    // world settles on the opposite of what was asked and stays there, the
+    // override would otherwise hold the panel at a lie for the rest of the
+    // session (a disconnect that something else immediately undoes leaves
+    // "Not protected" over a live tunnel, and the power button then tries to
+    // connect). Fifteen seconds is far longer than the few seconds a real
+    // connect needs to settle, so this can never cause a flash.
+    if (!busy && _actionEndedMs > 0 && Date.now() - _actionEndedMs > 15000) {
+      _desired = -1
+      pendingLabel = ""
     }
   }
+
 
   function applyState(text) {
     try {
       var s = JSON.parse(String(text || "{}"))
       recents = Array.isArray(s.recents) ? s.recents.slice(0, 3) : []
       nudgeDismissed = s.killSwitchNudgeDismissed === true
+      autoConnect = s.autoConnect === true
     } catch (e) {
       recents = []
       nudgeDismissed = false
+      autoConnect = false
     }
     stateLoaded = true
   }
 
   function saveState() {
-    stateFile.setText(JSON.stringify({ recents: recents, killSwitchNudgeDismissed: nudgeDismissed }))
+    stateFile.setText(JSON.stringify({
+      recents: recents,
+      killSwitchNudgeDismissed: nudgeDismissed,
+      autoConnect: autoConnect
+    }))
+  }
+
+  // ── Always On ───────────────────────────────────────────────────────────
+
+  function toggleAutoConnect() {
+    autoConnect = !autoConnect
+    _autoNextMs = 0
+    saveState()
+    autoReconcile()
+  }
+
+  // Run on every link poll, and checked against the world as it is right now.
+  //
+  // Back to the top of Recent, which is the server we were last actually on,
+  // however we got there. If that one fails it is skipped next time round, so
+  // a server that is full or gone can't stall this forever.
+  function autoReconcile() {
+    if (!autoReady) return
+    if (connected || linkActive || busy) return
+    if (_autoNextMs > 0 && Date.now() < _autoNextMs) return
+    var t = recents.length > 0 && Array.isArray(recents[0].args) ? recents[0] : null
+    if (t && !_autoPinFailed) connectTo(t.args, "Reconnecting to " + t.title + "…", t, true)
+    else connectTo([], "Reconnecting to fastest…", null, true)
   }
 
   function recordRecent(target) {
@@ -527,7 +685,11 @@ Item {
     // the configured interval once it closes.
     interval: (root.panelOpen ? 5 : root.refreshIntervalSec) * 1000
     repeat: true
-    running: root.installed && root.signedIn
+    // Not while a connect or disconnect is running: `protonvpn connect`
+    // blocks for 30-60s, and a 5s poll across that is where most of the
+    // concurrent CLI processes used to come from. delayedRefresh pulls fresh
+    // state 1.2s after the action finishes, so nothing is lost by waiting.
+    running: root.installed && root.signedIn && !root.busy
     onTriggered: root.refreshStatus()
   }
 
@@ -539,6 +701,26 @@ Item {
       root.watchLink()
       root.refreshStatus()
     }
+  }
+
+  // Start exactly one deferred probe, the moment a slot frees up, so the queue
+  // drains at the CLI's own pace rather than waiting on a timer tick.
+  // Account first: `signedIn` gates the map, the tabs and every setting.
+  function drainProbes() {
+    if (cliBusy) return
+    if (_wantAccount) { _wantAccount = false; refreshAccount(); return }
+    if (_wantConfig) { _wantConfig = false; loadConfig(); return }
+    if (_wantCountries) { _wantCountries = false; loadCountries(false); return }
+    if (_wantStatus) { _wantStatus = false; refreshStatus(); return }
+  }
+
+  // Safety net only: drainProbes() normally runs from each probe's exit.
+  Timer {
+    id: probeRetry
+    interval: 600
+    repeat: true
+    running: root._probesPending && root.installed
+    onTriggered: root.drainProbes()
   }
 
   Timer {
@@ -632,12 +814,22 @@ Item {
       if (!link.active && was) root.trafficReset()
       // A tunnel we didn't ask to close is the one thing a person must hear
       // about: the icon dimming is not a signal most people read.
+      //
+      // A connect in flight is not that. Two things take the tunnel down
+      // mid-connect and neither is news: switching servers tears the old one
+      // down first, and every `protonvpn connect` briefly double-activates,
+      // because the CLI adds the NM profile (which NetworkManager then
+      // auto-activates on its own, autoconnect defaults to yes) and then
+      // explicitly activates it, so NM preempts its own activation. Without
+      // this guard that lands as "You're no longer protected" in the middle
+      // of a connect the person just asked for.
       if (was && !link.active) {
-        if (!root._expectDown && !actionProcess.running)
+        if (!root._expectDown && !actionProcess.running && !connectProcess.running)
           root.notify("Proton VPN disconnected", "You're no longer protected.", "critical")
         root._expectDown = false
       }
       root.reconcile()
+      root.autoReconcile()
       // The tunnel came up or went away behind our back (CLI in a terminal,
       // a drop, a reconnect), pull the detail rows back in sync.
       if (was !== link.active) root.refreshStatus()
@@ -654,6 +846,8 @@ Item {
     stdout: StdioCollector { id: statusStdout; waitForEnd: true }
     stderr: StdioCollector { id: statusStderr; waitForEnd: true }
     onExited: function(exitCode) {
+      root._probeRunning = false
+      Qt.callLater(root.drainProbes)
       if (exitCode === 0) {
         root.applyStatus(String(statusStdout.text || ""))
         root.lastError = ""
@@ -669,6 +863,8 @@ Item {
     command: []
     stdout: StdioCollector { id: accountStdout; waitForEnd: true }
     onExited: function(exitCode) {
+      root._probeRunning = false
+      Qt.callLater(root.drainProbes)
       // A one-off failure must not latch "signed out" forever, retry instead
       // of leaving a signed-in user staring at a sign-in prompt.
       if (exitCode !== 0) { accountRetry.restart(); return }
@@ -697,6 +893,10 @@ Item {
     command: []
     stdout: StdioCollector { id: configStdout; waitForEnd: true }
     onExited: function(exitCode) {
+      root._probeRunning = false
+      root.configPending = ""
+      root.configPendingValue = ""
+      Qt.callLater(root.drainProbes)
       if (exitCode !== 0) return
       root.config = Model.parseConfig(String(configStdout.text || ""))
       root.configLoaded = true
@@ -717,7 +917,7 @@ Item {
       root._configValue = ""
       if (exitCode !== 0) {
         if (key === "netshield" && value === "malware-ads-trackers" && Model.isPlanError(err)) {
-          root.setConfig("netshield", "malware-only")
+          root.applyConfig("netshield", "malware-only")
           return
         }
         root.lastError = Model.isPlanError(err) ? "Requires a Proton VPN Plus plan" : Model.elide(err || "Setting failed")
@@ -785,6 +985,8 @@ Item {
     command: []
     stdout: StdioCollector { id: countriesStdout; waitForEnd: true }
     onExited: function(exitCode) {
+      root._probeRunning = false
+      Qt.callLater(root.drainProbes)
       if (exitCode !== 0) return
       var list = Model.parseCountries(String(countriesStdout.text || ""))
       root.countries = list
@@ -799,11 +1001,17 @@ Item {
     stdout: StdioCollector { id: connectStdout; waitForEnd: true }
     stderr: StdioCollector { id: connectStderr; waitForEnd: true }
     onExited: function(exitCode) {
+      root._actionEndedMs = Date.now()
       var out = String(connectStdout.text || "")
       var err = String(connectStderr.text || "")
       var target = root._target
+      var wasAuto = root._autoAttempt
       root._target = null
+      root._autoAttempt = false
       root.pendingLabel = ""
+      root._autoNextMs = wasAuto && exitCode !== 0 ? Date.now() + root.autoRetryMs : 0
+      if (exitCode === 0) root._autoPinFailed = false
+      else if (wasAuto) root._autoPinFailed = true
       if (exitCode !== 0) {
         root._desired = -1
         var text = err || out || "Connect failed"
@@ -812,14 +1020,32 @@ Item {
         actionStatusTimer.restart()
       } else {
         root.lastError = ""
-        // First line is "Connected to <server> in <city>, <country>."
-        var line = Model.elide(out.split("\n")[0] || "", 90)
+        // The confirmation line, which is not always the first one: an expired
+        // server list puts "Server list is outdated, updating..." ahead of it,
+        // and that is not what the panel or the notification should report.
+        var line = Model.elide(Model.connectedLine(out) || out.split("\n")[0] || "", 90)
         root.actionStatus = line
         actionStatusTimer.restart()
+        // Fastest, Random, P2P, Secure Core and Tor arrive here with no target
+        // because you didn't name a destination, but you still ended up
+        // somewhere. Recover it from the CLI's own confirmation line so Recent
+        // is a record of where you've been, not only of what you clicked.
+        if (!target) {
+          var landed = Model.parseConnected(out)
+          if (landed) target = {
+            key: "server:" + landed.name,
+            title: landed.city !== "" ? landed.city : landed.name,
+            subtitle: [landed.country, landed.name].filter(function(v) { return v !== "" }).join(" · "),
+            args: [landed.name]
+          }
+        }
         root.recordRecent(target)
         root.notify("Protected", line, "normal")
         root.loadCities(true)
       }
+      // Look at the link now rather than waiting up to watchIntervalSec, so
+      // the override is released against fresh data as soon as possible.
+      root.watchLink()
       delayedRefresh.restart()
     }
   }
@@ -831,6 +1057,7 @@ Item {
     stdout: StdioCollector { id: actionStdout; waitForEnd: true }
     stderr: StdioCollector { id: actionStderr; waitForEnd: true }
     onExited: function(exitCode) {
+      root._actionEndedMs = Date.now()
       var out = String(actionStdout.text || "")
       var err = String(actionStderr.text || "")
       root.pendingLabel = ""

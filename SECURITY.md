@@ -23,7 +23,7 @@ section:
   or 2FA code.
 - Makes no network requests of its own. The world map is drawn from bundled
   data and the Proton client's own cache.
-- Never uses `sudo`. The CLI install goes through Omarchy's installer, which
+- Never asks for root. The CLI install goes through Omarchy's installer, which
   owns the password prompt in a terminal.
 - Runs every command as an argument list, never through a shell, except the
   username handed to Omarchy's terminal launcher, which is allow-listed and

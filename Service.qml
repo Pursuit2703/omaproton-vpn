@@ -253,7 +253,7 @@ Item {
     }
   }
 
-  // Omarchy's own installer flow: a floating terminal owns the sudo prompt,
+  // Omarchy's own installer flow: a floating terminal owns the password prompt,
   // so the shell process never touches privileges.
   function installCli() {
     if (installed || installing) return

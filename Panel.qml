@@ -762,7 +762,7 @@ Panel {
           Text {
             visible: vpn.gtkAppInstalled
             width: parent.width
-            text: "The Proton VPN desktop app is installed. It can't run alongside the CLI this widget uses. Quit the app before connecting, or remove it with:  omarchy pkg drop proton-vpn-gtk-app"
+            text: "The Proton VPN desktop app is installed. It can't run alongside the CLI this widget uses. Quit the app before connecting, or remove it from the Omarchy menu under Remove → Package."
             color: root.urgent
             font.family: root.fontFamily
             font.pixelSize: Style.font.caption

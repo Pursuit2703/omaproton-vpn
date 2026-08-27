@@ -99,11 +99,8 @@ omarchy plugin enable io.github.grichard99.omaproton-vpn right
 ### Already have the Proton VPN desktop app?
 
 The desktop app and the CLI can't run at the same time. The panel warns you if
-the app is installed. Quit it before connecting, or remove it:
-
-```bash
-omarchy pkg drop proton-vpn-gtk-app
-```
+the app is installed. Quit it before connecting, or remove it from the Omarchy
+menu under Remove → Package (`proton-vpn-gtk-app`).
 
 ### Two-factor with a security key?
 
@@ -493,8 +490,8 @@ Omarchy plugin. It:
 
 - stores no credentials, tokens, or account data
 - makes no network requests of its own
-- never uses `sudo`, the CLI install runs through Omarchy's own installer in a
-  terminal that owns the password prompt
+- never asks for root, the CLI install runs through Omarchy's own installer
+  in a terminal that owns the password prompt
 - never downloads or executes remote code
 - runs every command as an argument list, never through a shell, with one
   exception below

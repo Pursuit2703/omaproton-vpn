@@ -50,8 +50,8 @@ into the CLI's own prompt, and Proton's client owns the session from there.
 - [How to use it](#how-to-use-it): the bar icon, the map, quick connect,
   countries and cities, traffic, [keyboard](#keyboard)
 - [How the protections work](#how-the-protections-work): Kill Switch,
-  NetShield, Always On, split tunneling, and
-  [why the first and last can't both be on](#why-the-kill-switch-and-split-tunneling-cant-both-be-on)
+  NetShield, Always On, [port forwarding](#port-forwarding), split tunneling,
+  and [why the Kill Switch and split tunneling can't both be on](#why-the-kill-switch-and-split-tunneling-cant-both-be-on)
 - [Settings](#settings)
 - [Security and privacy](#security-and-privacy)
 - [Notes](#notes), [Credits](#credits), [License](#license)
@@ -311,8 +311,9 @@ connection.
 
 `Enter` on **Mode** or **Apps** opens that picker, which then owns the
 keyboard: inside the Apps list, typing filters it, arrows move, `Enter` ticks,
-and `Esc` closes it again. The Kill Switch dialog works the same way: arrows
-move between Cancel and confirm, `Enter` chooses, `Esc` cancels.
+and `Esc` closes it again. The Kill Switch and Port forwarding dialogs work
+the same way: arrows move between Cancel and confirm, `Enter` chooses, `Esc`
+cancels.
 
 Hover only moves the selection when you actually move the pointer. Scrolling
 with the keyboard slides rows under a stationary mouse, and without that rule
@@ -320,7 +321,7 @@ the row that lands under the pointer would drag the selection back to itself.
 
 ## How the protections work
 
-<img src="docs/protection-tab.png" width="360" alt="The Protection tab: Kill Switch, NetShield, Always On and split tunneling switches, the Mode and Apps pickers, account, and sign out">
+<img src="docs/protection-tab.png" width="360" alt="The Protection tab: Kill Switch, NetShield, Always On, Port forwarding and split tunneling switches, account, and sign out">
 
 Five switches, three owners. Knowing who owns each one explains most of how
 they behave:
@@ -352,25 +353,6 @@ levels: off, malware only, or malware plus ads and trackers. The switch asks
 for the full level; on a free plan Proton only allows malware blocking, and
 the widget steps down to that automatically instead of failing.
 
-### Port forwarding
-
-For torrent clients. When on, connecting to a **P2P server** (Quick connect →
-P2P, or any city whose servers carry the P2P flag) asks Proton for an inbound
-port, and the panel shows it as a **Forwarded port** row you click to copy. On
-any other server there is no port and the switch says so. Turning it on asks
-first, like the Kill Switch does, because it opens an inbound port on your VPN
-address and sends whatever arrives there to this computer. Turning it off is
-immediate.
-
-Proton hands the port out over NAT-PMP from the tunnel gateway and drops it
-unless it's renewed, which is why Proton's guide has you run a `natpmpc` loop
-in a terminal. The switch is that loop: while it's on and the tunnel is up,
-the widget renews the mapping every 45 seconds with a small script of its own
-(`port.py`, standard library only, no `natpmpc` to install). Turn it off and
-the renewals stop. Off by default: a forwarded port is an open inbound door,
-and nobody gets one without asking. Paid plans only, like the other Proton
-features.
-
 ### Always On
 
 Whenever Proton isn't connected, connect it. That covers booting, logging in,
@@ -398,6 +380,25 @@ Always On and the Kill Switch are different answers to the same question.
 The Kill Switch stops traffic leaking *while* the tunnel is down; Always On
 makes the tunnel come *back*. Together they close the gap from both sides:
 nothing leaks, and you're not stuck offline.
+
+### Port forwarding
+
+For torrent clients. When on, connecting to a **P2P server** (Quick connect →
+P2P, or any city whose servers carry the P2P flag) asks Proton for an inbound
+port, and the panel shows it as a **Forwarded port** row you click to copy. On
+any other server there is no port and the switch says so. Turning it on asks
+first, like the Kill Switch does, because it opens an inbound port on your VPN
+address and sends whatever arrives there to this computer. Turning it off is
+immediate.
+
+Proton hands the port out over NAT-PMP from the tunnel gateway and drops it
+unless it's renewed, which is why Proton's guide has you run a `natpmpc` loop
+in a terminal. The switch is that loop: while it's on and the tunnel is up,
+the widget renews the mapping every 45 seconds with a small script of its own
+(`port.py`, standard library only, no `natpmpc` to install). Turn it off and
+the renewals stop. Off by default: a forwarded port is an open inbound door,
+and nobody gets one without asking. Paid plans only, like the other Proton
+features.
 
 ### Split tunneling
 
@@ -486,6 +487,9 @@ VPN with the setting unchanged, never stranded off it.
 | Everything private, except one app that refuses to work over a VPN | Off | Exclude that app | On |
 | Only one app private (a torrent client, a browser for one site) | Off | Include that app | Your call |
 | Nothing automatic; I connect by hand | Off | Off | Off |
+
+Torrenting with a reachable port is any of these rows plus
+[port forwarding](#port-forwarding) on and a P2P server.
 
 Note the second and third rows have the Kill Switch off, because they have to.
 If that one app is a bank that blocks VPN IPs, consider whether a second

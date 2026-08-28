@@ -118,7 +118,9 @@ Panel {
     if (vpn.busy && vpn.pendingLabel !== "") return vpn.pendingLabel
     if (vpn.connected) {
       var server = Model.routeLabel(vpn.displayServer)
-      return server !== "" ? server : "Protected"
+      if (server === "") return "Protected"
+      // Two hops deserve saying so: shield-lock, the feature, then the route.
+      return Model.isSecureCore(vpn.displayServer) ? "\udb82\udd9d Secure Core · " + server : server
     }
     if (!vpn.accountProbed) return "Checking…"
     if (!vpn.signedIn) return "Signed out"
@@ -934,7 +936,8 @@ Panel {
                   hasCursor: root.cursorActive && root.focusSection === "quick" && root.quickIndex === index
                   title: modelData.label
                   subtitle: modelData.hint
-                  trailing: modelData.plus ? "PLUS" : ""
+                  trailing: modelData.key === "securecore" && vpn.connected && Model.isSecureCore(vpn.displayServer)
+                            ? "ACTIVE" : (modelData.plus ? "PLUS" : "")
                   enabled: !vpn.busy
                   onEntered: root.setCursorFromHover("quick", index)
                   onClicked: root.runQuick(modelData.key)

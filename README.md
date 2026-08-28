@@ -458,9 +458,9 @@ signing out also disconnects.
 
 ### Notifications
 
-If the VPN drops unexpectedly you get a desktop notification, "Proton VPN
-disconnected, You're no longer protected." Connecting shows "Protected" with
-the server. Turn both off in the widget's settings if you'd rather not.
+If the VPN drops unexpectedly you get a desktop notification, "VPN
+Disconnected, You're no longer protected." Connecting shows "VPN Connected"
+with the server and the protocol. Turn both off in the widget's settings if you'd rather not.
 
 ## Settings
 
@@ -468,7 +468,7 @@ Configurable from Omarchy's widget settings:
 
 | Setting | Default | What it controls |
 | --- | --- | --- |
-| Desktop notifications | On | "Protected" on connect; "disconnected" if the tunnel drops unexpectedly. |
+| Desktop notifications | On | "VPN Connected" with the server and protocol on connect; "VPN Disconnected" if the tunnel drops unexpectedly. |
 | Status refresh interval | 30 s | How often `protonvpn status` runs for the detail rows while the panel is closed. Open panel: every 5 s. |
 | Link watch interval | 4 s | How often `nmcli` is polled for the bar icon. |
 
@@ -553,8 +553,8 @@ when its own cache has expired, server loads every ~15 minutes, the full list
 every ~3 hours, and only while connected. The widget's polling doesn't add API
 traffic beyond what the client already does on its own schedule.
 
-**Notifications** go through `notify-send` and contain only the connection
-state and server name.
+**Notifications** are sent straight to the desktop notification service over
+D-Bus and contain only the connection state and server name.
 
 **On screen.** Your Proton account email is shown only under Protection →
 Account, not in the panel's default view, but if you screenshot or

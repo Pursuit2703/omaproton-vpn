@@ -84,6 +84,17 @@ function parseStatus(raw) {
   }
 }
 
+// settings.json `protocol` -> a label for the panel and notifications.
+function protocolLabel(raw) {
+  var p = String(raw || "").trim().toLowerCase()
+  if (p === "") return ""
+  if (p === "wireguard") return "WireGuard"
+  if (p === "openvpn-udp" || p === "openvpn_udp") return "OpenVPN UDP"
+  if (p === "openvpn-tcp" || p === "openvpn_tcp") return "OpenVPN TCP"
+  if (p.indexOf("openvpn") === 0) return "OpenVPN"
+  return p.charAt(0).toUpperCase() + p.slice(1)
+}
+
 // `protonvpn info` -> "Account: 'user@example.com'", or "Account: 'None'"
 // while signed out.
 function parseAccount(raw) {

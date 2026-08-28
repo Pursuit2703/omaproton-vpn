@@ -764,10 +764,39 @@ Item {
     uptimeSec = _linkUpMs > 0 ? Math.floor((now - _linkUpMs) / 1000) : 0
   }
 
+  // The plugin's own mark for the toast, written to the state dir in the
+  // theme's accent colour so it wears every Omarchy theme like the widget
+  // does, and rewritten whenever the theme changes. A themed-icon name was
+  // the wrong tool here: most icon themes don't carry `network-vpn`, and
+  // the shell drew Qt's missing-texture checkerboard in its place (#21).
+  readonly property string notificationIconPath: stateDir + "/notification-icon.svg"
+  readonly property string protonMarkPath: "m10.176 20.058.858-1.28 6.513-9.838c.57-.86.026-2.014-1.005-2.131L.378 4.95l8.373 15.055a.84.84 0 0 0 1.424.052h.001zM23.586 7.14l-9.662 14.61c-1.036 1.567-3.38 1.478-4.293-.162l-.093-.168c.3-.01.594-.086.855-.235a1.85 1.85 0 0 0 .612-.57l.86-1.28 6.516-9.844c.46-.694.525-1.56.173-2.314a2.375 2.375 0 0 0-1.899-1.364L.493 3.956l-.476-.054C-.163 2.392 1.101.95 2.784 1.143l18.991 2.16c1.856.21 2.835 2.289 1.812 3.838z"
+
+  function writeNotificationIcon() {
+    // Qt prints an opaque colour as #rrggbb and a translucent one as
+    // #aarrggbb; SVG wants the former, so drop the alpha if present.
+    var hex = String(Color.accent)
+    if (hex.length === 9) hex = "#" + hex.slice(3)
+    notificationIconFile.setText('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="24" height="24">'
+                                 + '<path fill="' + hex + '" d="' + protonMarkPath + '"/></svg>\n')
+  }
+
   function notify(summary, body, urgency) {
     if (!notificationsOn) return
-    Quickshell.execDetached(["notify-send", "-a", "Proton VPN", "-i", "network-vpn",
-                             "-u", urgency || "normal", summary, body || ""])
+    // Call org.freedesktop.Notifications.Notify directly instead of going
+    // through notify-send or the omarchy-notification-send wrapper: one
+    // process, no argv reparsing of the summary/body, and the omarchy-glyph
+    // hint gives the shell a Nerd Font shield-lock to draw if the SVG isn't
+    // there yet (first launch) or fails to load. Signature: app_name, replaces_id, app_icon, summary,
+    // body, actions, hints, expire_timeout.
+    var level = urgency === "critical" ? "2" : (urgency === "low" ? "0" : "1")
+    Quickshell.execDetached(["busctl", "--user", "--", "call",
+                             "org.freedesktop.Notifications", "/org/freedesktop/Notifications",
+                             "org.freedesktop.Notifications", "Notify", "susssasa{sv}i",
+                             "OmaProton VPN", "0", notificationIconPath, summary, body || "",
+                             "0",
+                             "2", "urgency", "y", level, "omarchy-glyph", "s", "\udb82\udd9d",
+                             "-1"])
   }
 
   function applyStatus(raw) {
@@ -902,7 +931,13 @@ Item {
     // Owner-only, and fixed up on existing installs too: the file holds where
     // you've been connecting, which is nobody else's business on a shared box.
     Quickshell.execDetached(["install", "-d", "-m", "700", stateDir])
+    writeNotificationIcon()
     refresh()
+  }
+
+  Connections {
+    target: Color
+    function onAccentChanged() { root.writeNotificationIcon() }
   }
 
   onPanelOpenChanged: if (panelOpen) {
@@ -926,6 +961,13 @@ Item {
     running: root.panelOpen && root.linkActive && root.linkDevice !== ""
     triggeredOnStart: true
     onTriggered: root.trafficSample()
+  }
+
+  FileView {
+    id: notificationIconFile
+    path: root.notificationIconPath
+    printErrors: false
+    atomicWrites: true
   }
 
   FileView {
@@ -1109,7 +1151,7 @@ Item {
       // of a connect the person just asked for.
       if (was && !link.active) {
         if (!root._expectDown && !actionProcess.running && !connectProcess.running)
-          root.notify("Proton VPN disconnected", "You're no longer protected.", "critical")
+          root.notify("VPN Disconnected \udb83\udfc6", "You're no longer protected.", "critical")
         root._expectDown = false
       }
       root.reconcile()
@@ -1328,7 +1370,12 @@ Item {
           }
         }
         root.recordRecent(target)
-        root.notify("Protected", line, "normal")
+        // "Connected to NL#42 in Amsterdam, Netherlands." -> the server, plus
+        // the protocol the CLI is configured for, since its confirmation
+        // line never names it and `protonvpn status` hasn't run yet.
+        var where = line.replace(/^connected to\s+/i, "").replace(/\.\s*$/, "")
+        var proto = Model.protocolLabel(root.protonSettings ? root.protonSettings["protocol"] : "")
+        root.notify("VPN Connected \udb80\udf3e", [where, proto].filter(function(v) { return v !== "" }).join(" · "), "normal")
         root.loadCities(true)
       }
       // Look at the link now rather than waiting up to watchIntervalSec, so

@@ -129,7 +129,7 @@ Item {
   // Copy is the only thing the widget ever does with the port.
   function copyForwardedPort() {
     if (forwardedPort === "") return
-    Quickshell.execDetached(["wl-copy", forwardedPort])
+    Quickshell.execDetached(["wl-copy", "--", forwardedPort])
   }
 
   // Persisted across restarts: last few places connected to, and whether the
@@ -843,7 +843,7 @@ Item {
     Quickshell.execDetached(["busctl", "--user", "--", "call",
                              "org.freedesktop.Notifications", "/org/freedesktop/Notifications",
                              "org.freedesktop.Notifications", "Notify", "susssasa{sv}i",
-                             "OmaProton VPN", "0", notificationIconPath, summary, body || "",
+                             "OmaProton VPN", "0", notificationIconPath, summary, Model.escapeMarkup(body),
                              "0",
                              "2", "urgency", "y", level, "omarchy-glyph", "s", "\udb82\udd9d",
                              "-1"])
@@ -981,8 +981,16 @@ Item {
     // Owner-only, and fixed up on existing installs too: the file holds where
     // you've been connecting, which is nobody else's business on a shared box.
     Quickshell.execDetached(["install", "-d", "-m", "700", stateDir])
-    writeNotificationIcon()
     refresh()
+  }
+
+  // The state dir is created by a detached process, so the icon is written
+  // a moment later rather than racing it on a first launch.
+  Timer {
+    interval: 1000
+    running: true
+    repeat: false
+    onTriggered: root.writeNotificationIcon()
   }
 
   Connections {
@@ -1038,6 +1046,8 @@ Item {
         var out = exitCode === 0 ? JSON.parse(String(portStdout.text || "{}")) : {}
         if (out && out.port) port = String(out.port)
       } catch (e) { port = "" }
+      // Digits only, or nothing: this is what goes to the clipboard.
+      if (!/^[1-9][0-9]{0,4}$/.test(port)) port = ""
       // A missed renewal (one timeout) shouldn't blank the row for 45 s; a
       // server change already clears it, and no port on a non-P2P server
       // stays "" because nothing ever set it.

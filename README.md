@@ -129,8 +129,9 @@ protonvpn disconnect
 protonvpn signout
 ```
 
-The widget also keeps a small file of your recent locations at
-`~/.local/state/omarchy-protonvpn/state.json`; delete it if you like.
+The widget also keeps a small folder of its own at
+`~/.local/state/omarchy-protonvpn/` (your recent locations and the icon it
+uses in notifications); delete it if you like.
 
 ## How to use it
 
@@ -321,13 +322,14 @@ the row that lands under the pointer would drag the selection back to itself.
 
 <img src="docs/protection-tab.png" width="360" alt="The Protection tab: Kill Switch, NetShield, Always On and split tunneling switches, the Mode and Apps pickers, account, and sign out">
 
-Four switches, three owners. Knowing who owns each one explains most of how
+Five switches, three owners. Knowing who owns each one explains most of how
 they behave:
 
 | Switch | Saved by | Where | Needs |
 | --- | --- | --- | --- |
 | **Kill Switch** | Proton CLI (`protonvpn config set`) | Proton's settings | Tunnel down to change |
 | **NetShield** | Proton CLI (`protonvpn config set`) | Proton's settings | Plus plan for ads and trackers |
+| **Port forwarding** | Proton CLI (`protonvpn config set`) | Proton's settings | Plus plan, and a P2P server for a port |
 | **Always On** | This widget | `~/.local/state/omarchy-protonvpn/state.json` | Nothing |
 | **Split tunneling** | This widget, editing Proton's file | `~/.config/Proton/VPN/settings.json` | Kill Switch off |
 
@@ -534,7 +536,8 @@ Omarchy plugin. It:
   with port forwarding on and the tunnel up, `port.py` sends a NAT-PMP renewal
   to the VPN gateway (`10.2.0.1`, inside the tunnel) every 45 seconds. That is
   the same exchange Proton's own guide has you run, it goes nowhere else, and
-  copying the port to the clipboard is the only thing done with the answer
+  the answer is only shown in the panel and copied to the clipboard when you
+  click it
 - never asks for root, the CLI install runs through Omarchy's own installer
   in a terminal that owns the password prompt
 - never downloads or executes remote code
@@ -543,9 +546,10 @@ Omarchy plugin. It:
 - reads Proton's server cache read-only (city list, coordinates, and the map's
   connected-city lookup all come from it), reads the tunnel's byte counters
   under `/sys/class/net/` once a second while the panel is open, and writes
-  one file of its own
-  (`~/.local/state/omarchy-protonvpn/state.json`: recent location labels,
-  whether you dismissed the Kill Switch prompt, and whether Always On is on)
+  two files of its own under `~/.local/state/omarchy-protonvpn/`
+  (`state.json`: recent location labels, whether you dismissed the Kill
+  Switch prompt, and whether Always On is on; `notification-icon.svg`: the
+  Proton mark in your theme's colour, for the notification)
 - writes one file that isn't its own, and only if you turn split tunneling on:
   `~/.config/Proton/VPN/settings.json`, Proton's own settings. Rules below.
 
@@ -559,8 +563,9 @@ terminal runs non-interactively, so nothing lands in your shell history.
 
 **Settings writes.** The Kill Switch, NetShield and port forwarding switches run
 `protonvpn config set`. The widget will only ever pass `kill-switch` ∈
-`{off, standard}` and `netshield` ∈ `{off, malware-only, malware-ads-trackers}`;
-no other key or value can reach the CLI from this code.
+`{off, standard}`, `netshield` ∈ `{off, malware-only, malware-ads-trackers}`
+and `port-forwarding` ∈ `{off, on}`; no other key or value can reach the CLI
+from this code.
 
 **Writing Proton's settings file.** Split tunneling is the one feature with no
 CLI command behind it, so the widget edits `~/.config/Proton/VPN/settings.json`
@@ -599,7 +604,8 @@ every ~3 hours, and only while connected. The widget's polling doesn't add API
 traffic beyond what the client already does on its own schedule.
 
 **Notifications** are sent straight to the desktop notification service over
-D-Bus and contain only the connection state and server name.
+D-Bus and contain only the connection state, the server and its location, and
+the protocol.
 
 **On screen.** Your Proton account email is shown only under Protection →
 Account, not in the panel's default view, but if you screenshot or

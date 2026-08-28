@@ -107,7 +107,15 @@ function protocolLabel(raw) {
   if (p === "openvpn-udp" || p === "openvpn_udp") return "OpenVPN UDP"
   if (p === "openvpn-tcp" || p === "openvpn_tcp") return "OpenVPN TCP"
   if (p.indexOf("openvpn") === 0) return "OpenVPN"
+  // Anything else is shown only if it looks like a protocol name.
+  if (!/^[a-z0-9_-]{1,32}$/.test(p)) return ""
   return p.charAt(0).toUpperCase() + p.slice(1)
+}
+
+// Notification bodies are rendered as markup by the shell, so text that came
+// from the CLI is escaped before it goes into one.
+function escapeMarkup(s) {
+  return String(s || "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
 }
 
 // `protonvpn info` -> "Account: 'user@example.com'", or "Account: 'None'"

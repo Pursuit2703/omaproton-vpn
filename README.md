@@ -197,7 +197,8 @@ Rows marked **PLUS** need a paid plan. On a free plan they fail with a clear
 Under Quick Connect sit two tabs, in the same pill style as Omarchy's network
 panel. **Connections** holds everywhere you can go: recent places, and the
 country and city lists. **Protection** holds everything about *how* you're
-protected: the Kill Switch, NetShield, Always On, split tunneling, and your
+protected: the Kill Switch, NetShield, port forwarding, Always On, split
+tunneling, and your
 account. The tab you pick stays until you close the panel.
 
 The Protection tab has enough rules behind it to deserve its own chapter:
@@ -252,6 +253,10 @@ exactly what `protonvpn status` prints.
 The **Server** line updates within seconds from NetworkManager even while a
 connect is still in progress. The other rows come from the CLI and can lag a
 moment behind.
+
+With [port forwarding](#port-forwarding) on and a P2P server connected, a
+**Forwarded port** row appears. Click it to copy the number; it reads "Copied"
+for a moment. Paste it into your torrent client's listening port.
 
 ### Traffic
 
@@ -334,6 +339,22 @@ Blocks malware, ads, and trackers at the DNS level, on Proton's side. Three
 levels: off, malware only, or malware plus ads and trackers. The switch asks
 for the full level; on a free plan Proton only allows malware blocking, and
 the widget steps down to that automatically instead of failing.
+
+### Port forwarding
+
+For torrent clients. When on, connecting to a **P2P server** (Quick connect →
+P2P, or any city whose servers carry the P2P flag) asks Proton for an inbound
+port, and the panel shows it as a **Forwarded port** row you click to copy. On
+any other server there is no port and the switch says so.
+
+Proton hands the port out over NAT-PMP from the tunnel gateway and drops it
+unless it's renewed, which is why Proton's guide has you run a `natpmpc` loop
+in a terminal. The switch is that loop: while it's on and the tunnel is up,
+the widget renews the mapping every 45 seconds with a small script of its own
+(`port.py`, standard library only, no `natpmpc` to install). Turn it off and
+the renewals stop. Off by default: a forwarded port is an open inbound door,
+and nobody gets one without asking. Paid plans only, like the other Proton
+features.
 
 ### Always On
 
@@ -494,7 +515,11 @@ This plugin runs unsandboxed inside the Omarchy shell process, like every
 Omarchy plugin. It:
 
 - stores no credentials, tokens, or account data
-- makes no network requests of its own
+- makes no network requests of its own, with one exception you switch on:
+  with port forwarding on and the tunnel up, `port.py` sends a NAT-PMP renewal
+  to the VPN gateway (`10.2.0.1`, inside the tunnel) every 45 seconds. That is
+  the same exchange Proton's own guide has you run, it goes nowhere else, and
+  copying the port to the clipboard is the only thing done with the answer
 - never asks for root, the CLI install runs through Omarchy's own installer
   in a terminal that owns the password prompt
 - never downloads or executes remote code
@@ -517,7 +542,7 @@ allow-list, letters, digits, and `. _ + @ -` only, and single-quoted before
 it goes anywhere; anything else is refused with a message, not escaped. The
 terminal runs non-interactively, so nothing lands in your shell history.
 
-**Settings writes.** The Kill Switch and NetShield switches run
+**Settings writes.** The Kill Switch, NetShield and port forwarding switches run
 `protonvpn config set`. The widget will only ever pass `kill-switch` ∈
 `{off, standard}` and `netshield` ∈ `{off, malware-only, malware-ads-trackers}`;
 no other key or value can reach the CLI from this code.

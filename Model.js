@@ -84,6 +84,16 @@ function parseStatus(raw) {
   }
 }
 
+// Secure Core servers are named for both hops: "CH-US#3" enters Switzerland
+// and exits US server 3. Show that as a route, "CH → US#3". Only CH, IS and
+// SE are entry countries, which keeps regional names like "US-TX#40" as-is.
+function routeLabel(name) {
+  var n = String(name || "").trim()
+  var m = n.match(/^(CH|IS|SE)-([A-Z]{2}(?:-[A-Z]{2,3})?)#(\d+)$/i)
+  if (!m) return n
+  return m[1].toUpperCase() + " → " + m[2].toUpperCase() + "#" + m[3]
+}
+
 // settings.json `protocol` -> a label for the panel and notifications.
 function protocolLabel(raw) {
   var p = String(raw || "").trim().toLowerCase()

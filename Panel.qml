@@ -117,7 +117,7 @@ Panel {
     if (!vpn.installed) return vpn.installing ? "Installing…" : "Not installed"
     if (vpn.busy && vpn.pendingLabel !== "") return vpn.pendingLabel
     if (vpn.connected) {
-      var server = vpn.displayServer
+      var server = Model.routeLabel(vpn.displayServer)
       return server !== "" ? server : "Protected"
     }
     if (!vpn.accountProbed) return "Checking…"

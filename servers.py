@@ -115,20 +115,48 @@ def all_cities(data):
     return rows
 
 
+def country_place(data, code):
+    """Where a country is, for the map: the location of its first regular
+    server. Secure Core entry countries (CH, IS, SE) each have one city."""
+    for s in data.get("LogicalServers") or []:
+        if (s.get("ExitCountry") or "").upper() != code:
+            continue
+        if (s.get("Features") or 0) & SECURE_CORE:
+            continue
+        loc = s.get("Location") or {}
+        if loc.get("Lat") is None or loc.get("Long") is None:
+            continue
+        return {
+            "code": code,
+            "city": (s.get("City") or "").strip(),
+            "lat": loc.get("Lat"),
+            "lon": loc.get("Long"),
+        }
+    return None
+
+
 def locate(data, name):
-    """Where one server is. Used to light up the connected city on the map."""
+    """Where one server is. Used to light up the connected city on the map.
+    A Secure Core server (CH-US#3: enters Switzerland, exits New York) also
+    carries its entry hop so the map can draw the route."""
     want = name.strip().upper()
     for s in data.get("LogicalServers") or []:
         if (s.get("Name") or "").upper() != want:
             continue
         loc = s.get("Location") or {}
-        return {
+        place = {
             "name": s.get("Name") or "",
             "code": (s.get("ExitCountry") or "").upper(),
             "city": (s.get("City") or "").strip(),
             "lat": loc.get("Lat"),
             "lon": loc.get("Long"),
         }
+        entry_code = (s.get("EntryCountry") or "").upper()
+        if (s.get("Features") or 0) & SECURE_CORE and entry_code and entry_code != place["code"]:
+            entry = country_place(data, entry_code)
+            if entry:
+                place["entry"] = entry
+        return place
     return {}
 
 

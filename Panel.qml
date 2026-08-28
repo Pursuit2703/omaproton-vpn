@@ -293,8 +293,8 @@ Panel {
     else if (focusSection === "protection") {
       if (protectionIndex === 0) requestKillSwitch()
       else if (protectionIndex === 1) vpn.toggleNetShield()
-      else if (protectionIndex === 2) vpn.togglePortForwarding()
-      else if (protectionIndex === 3) vpn.toggleAutoConnect()
+      else if (protectionIndex === 2) vpn.toggleAutoConnect()
+      else if (protectionIndex === 3) requestPortForwarding()
       else if (protectionIndex === 4) vpn.toggleSplitTunnel()
       else if (splitDetailVisible && protectionIndex === 5) splitModeRow.toggle()
       else if (splitDetailVisible && protectionIndex === 6) splitAppsRow.toggle()
@@ -340,6 +340,18 @@ Panel {
     focusSection = "header"
     if (panelFlick) panelFlick.contentY = 0
   }
+
+  // Turning port forwarding on opens an inbound door; that deserves a
+  // sentence and a click. Turning it off just closes it.
+  function requestPortForwarding() {
+    if (vpn.portForwardingOn) { vpn.togglePortForwarding(); return }
+    portForwardConfirm.selectedIndex = 0
+    portForwardConfirm.opened = true
+  }
+
+  // Whichever dimmed dialog is up owns the keyboard.
+  readonly property var openDialog: killSwitchConfirm.opened ? killSwitchConfirm
+                                   : (portForwardConfirm.opened ? portForwardConfirm : null)
 
   // Disconnected there is nothing to interrupt, so the change just happens.
   // Connected, it costs a reconnect, and that is what the dialog is for.
@@ -566,24 +578,24 @@ Panel {
       onMoveRequested: function(dx, dy) {
         // A dialog with the screen dimmed behind it owns the keyboard, or the
         // cursor would be moving around underneath it unseen.
-        if (killSwitchConfirm.opened) {
-          killSwitchConfirm.selectedIndex = killSwitchConfirm.selectedIndex === 0 ? 1 : 0
+        if (root.openDialog) {
+          root.openDialog.selectedIndex = root.openDialog.selectedIndex === 0 ? 1 : 0
           return
         }
         if (!root.cursorActive) { root.cursorActive = true; return }
         root.moveCursor(dx, dy)
       }
       onActivateRequested: {
-        if (killSwitchConfirm.opened) {
-          if (killSwitchConfirm.selectedIndex === 0) killSwitchConfirm.canceled()
-          else killSwitchConfirm.confirmed()
+        if (root.openDialog) {
+          if (root.openDialog.selectedIndex === 0) root.openDialog.canceled()
+          else root.openDialog.confirmed()
           return
         }
         if (root.cursorActive) root.activateCursor()
       }
       // Inside a drill, escape backs out one level before it closes the panel.
       onCloseRequested: {
-        if (killSwitchConfirm.opened) { killSwitchConfirm.canceled(); return }
+        if (root.openDialog) { root.openDialog.canceled(); return }
         root.drilled ? root.drillOut() : root.close()
       }
       onTabRequested: function(direction) { root.switchPanel(direction) }
@@ -628,6 +640,21 @@ Panel {
         fontFamily: root.fontFamily
         onCanceled: opened = false
         onConfirmed: { opened = false; vpn.toggleKillSwitch() }
+      }
+
+      ConfirmDialog {
+        id: portForwardConfirm
+        anchors.fill: parent
+        z: 100
+        message: "Port forwarding opens an inbound port on your VPN address and sends "
+          + "whatever arrives on it to this computer. It's for torrent clients and only "
+          + "works on P2P servers. Turn it off again when you're done."
+        cancelText: "Cancel"
+        confirmText: "Turn on"
+        foreground: root.foreground
+        fontFamily: root.fontFamily
+        onCanceled: opened = false
+        onConfirmed: { opened = false; vpn.togglePortForwarding() }
       }
 
       Flickable {
@@ -1035,6 +1062,21 @@ Panel {
                 onClicked: { root.clearHighlight(); vpn.toggleNetShield() }
               }
 
+              // Widget-owned, unlike the two above: the CLI has no setting for
+              // this, so it lives in the widget's own state file.
+              Toggle {
+                width: parent.width
+                label: "Always On"
+                description: "Reconnects on boot and interruptions"
+                checked: vpn.autoConnect
+                enabled: !vpn.busy
+                hasCursor: root.cursorActive && root.focusSection === "protection" && root.protectionIndex === 2
+                foreground: root.foreground
+                fontFamily: root.fontFamily
+                onHovered: function(on) { if (on) root.setCursorFromHover("protection", 2) }
+                onClicked: { root.clearHighlight(); vpn.toggleAutoConnect() }
+              }
+
               Toggle {
                 width: parent.width
                 label: "Port forwarding"
@@ -1049,27 +1091,13 @@ Panel {
                 }
                 checked: vpn.portForwardingOn
                 enabled: vpn.configLoaded && vpn.configPending === ""
-                hasCursor: root.cursorActive && root.focusSection === "protection" && root.protectionIndex === 2
-                foreground: root.foreground
-                fontFamily: root.fontFamily
-                onHovered: function(on) { if (on) root.setCursorFromHover("protection", 2) }
-                onClicked: { root.clearHighlight(); vpn.togglePortForwarding() }
-              }
-
-              // Widget-owned, unlike the three above: the CLI has no setting for
-              // this, so it lives in the widget's own state file.
-              Toggle {
-                width: parent.width
-                label: "Always On"
-                description: "Reconnects on boot and interruptions"
-                checked: vpn.autoConnect
-                enabled: !vpn.busy
                 hasCursor: root.cursorActive && root.focusSection === "protection" && root.protectionIndex === 3
                 foreground: root.foreground
                 fontFamily: root.fontFamily
                 onHovered: function(on) { if (on) root.setCursorFromHover("protection", 3) }
-                onClicked: { root.clearHighlight(); vpn.toggleAutoConnect() }
+                onClicked: { root.clearHighlight(); root.requestPortForwarding() }
               }
+
 
               // Proton skips split tunneling entirely while the kill switch
               // is on, so the row says that instead of offering a switch that

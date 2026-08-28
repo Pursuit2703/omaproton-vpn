@@ -197,7 +197,7 @@ Rows marked **PLUS** need a paid plan. On a free plan they fail with a clear
 Under Quick Connect sit two tabs, in the same pill style as Omarchy's network
 panel. **Connections** holds everywhere you can go: recent places, and the
 country and city lists. **Protection** holds everything about *how* you're
-protected: the Kill Switch, NetShield, port forwarding, Always On, split
+protected: the Kill Switch, NetShield, Always On, port forwarding, split
 tunneling, and your
 account. The tab you pick stays until you close the panel.
 
@@ -345,7 +345,10 @@ the widget steps down to that automatically instead of failing.
 For torrent clients. When on, connecting to a **P2P server** (Quick connect →
 P2P, or any city whose servers carry the P2P flag) asks Proton for an inbound
 port, and the panel shows it as a **Forwarded port** row you click to copy. On
-any other server there is no port and the switch says so.
+any other server there is no port and the switch says so. Turning it on asks
+first, like the Kill Switch does, because it opens an inbound port on your VPN
+address and sends whatever arrives there to this computer. Turning it off is
+immediate.
 
 Proton hands the port out over NAT-PMP from the tunnel gateway and drops it
 unless it's renewed, which is why Proton's guide has you run a `natpmpc` loop

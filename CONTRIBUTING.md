@@ -1,20 +1,22 @@
 # Contributing
 
-Thanks for using OmaProton VPN. Feedback is very welcome, **code is not.**
+Thanks for using OmaProton VPN. Feedback is very welcome, **exact code is not.**
 
-## This repository has one author, on purpose
+## This repository has one managed author, on purpose
 
-This widget handles a VPN. It runs unsandboxed inside your Omarchy shell and
-it opens the terminal you type your Proton password into. For that reason
-every line in it is written and reviewed by one person, and only that person
-can commit:
+This widget handles a VPN. Security and privacy is high concern.
+It runs unsandboxed inside your Omarchy shell and it opens the terminal you 
+type your Proton password into. Additionally, AI allows for users to pump out
+code at lightning speed, while being very difficult to review and audit. 
+For that reason, every line in it is written and reviewed by one person, 
+and only that person can commit:
 
-- There are no collaborators and there never will be.
-- **Pull requests are not merged.** They are closed as a matter of policy,
-  with a note pointing here. This is a security decision, not a judgement on
-  your code: open-source projects now receive a steady stream of
-  AI-generated pull requests, some of them plausible-looking supply-chain
-  attempts, and the only review process that reliably keeps that out of a
+- There are no unknown collaborators.
+- **Pull requests are not merged.** They are closed as a matter of policy.
+  Suggestions are given credit, but exact code is not merged. This is a security
+  decision, not a judgement on your code: open-source projects now receive a
+  steady stream of AI-generated pull requests, some of them plausible-looking
+  supply-chain attempts, and the only review process that reliably keeps that out of a
   VPN widget is one where a single accountable person writes every line. If
   a PR describes a real bug or a good idea, it will be re-filed as an issue
   and credited to you when it ships.

@@ -783,6 +783,9 @@ Item {
 
   function notify(summary, body, urgency) {
     if (!notificationsOn) return
+    // The panel already shows the state change in its header and map, so a
+    // toast on top of it is noise. Only notify when the panel isn't open.
+    if (panelOpen) return
     // Call org.freedesktop.Notifications.Notify directly instead of going
     // through notify-send or the omarchy-notification-send wrapper: one
     // process, no argv reparsing of the summary/body, and the omarchy-glyph

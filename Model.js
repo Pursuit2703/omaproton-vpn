@@ -84,6 +84,11 @@ function parseStatus(raw) {
   }
 }
 
+// "CH-US#3", "IS-JP#1", "SE-FR#2": only CH, IS and SE are entry countries.
+function isSecureCore(name) {
+  return /^(CH|IS|SE)-[A-Z]{2}/i.test(String(name || "").trim())
+}
+
 // Secure Core servers are named for both hops: "CH-US#3" enters Switzerland
 // and exits US server 3. Show that as a route, "CH → US#3". Only CH, IS and
 // SE are entry countries, which keeps regional names like "US-TX#40" as-is.

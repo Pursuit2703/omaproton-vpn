@@ -118,7 +118,12 @@ Panel {
     if (vpn.busy && vpn.pendingLabel !== "") return vpn.pendingLabel
     if (vpn.connected) {
       var server = Model.routeLabel(vpn.displayServer)
-      return server !== "" ? server : "Protected"
+      if (server === "") return "Protected"
+      // The feature you asked for, then the server: two hops deserve saying
+      // so, and a P2P click should visibly have landed.
+      if (Model.isSecureCore(vpn.displayServer)) return "\udb82\udd9d Secure Core · " + server
+      if (vpn.p2pRequested && vpn.currentP2p) return "\udb81\udc97 P2P · " + server
+      return server
     }
     if (!vpn.accountProbed) return "Checking…"
     if (!vpn.signedIn) return "Signed out"
@@ -842,7 +847,17 @@ Panel {
             width: parent.width
             spacing: Style.spacing.labelGap
 
-            InfoPair { label: "Server"; value: vpn.displayServer }
+            // The server, and the feature it's serving: the route for Secure
+            // Core, P2P when that's what you asked for. Same rule as the header.
+            InfoPair {
+              label: "Server"
+              value: {
+                var name = vpn.displayServer
+                if (Model.isSecureCore(name)) return Model.routeLabel(name) + " · Secure Core"
+                if (vpn.p2pRequested && vpn.currentP2p) return name + " · P2P"
+                return name
+              }
+            }
             InfoPair { visible: vpn.location !== ""; label: "Location"; value: vpn.location }
             CopyPair {
               visible: vpn.forwardedPort !== ""
@@ -971,7 +986,11 @@ Panel {
                   hasCursor: root.cursorActive && root.focusSection === "quick" && root.quickIndex === index
                   title: modelData.label
                   subtitle: modelData.hint
-                  trailing: modelData.plus ? "PLUS" : ""
+                  // Secure Core gets an ACTIVE tag; P2P doesn't, since most
+                  // servers permit it and the header already says when you
+                  // asked for it.
+                  trailing: modelData.key === "securecore" && vpn.connected && Model.isSecureCore(vpn.displayServer)
+                            ? "ACTIVE" : (modelData.plus ? "PLUS" : "")
                   enabled: !vpn.busy
                   onEntered: root.setCursorFromHover("quick", index)
                   onClicked: root.runQuick(modelData.key)

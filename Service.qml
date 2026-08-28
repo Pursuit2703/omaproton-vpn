@@ -633,8 +633,15 @@ Item {
 
   // target: {key, title, subtitle, args} recorded to recents on success, or
   // null for quick actions that are already one click away.
+  // Whether the current connection was asked for with the P2P row: most
+  // servers permit P2P, so the panel only headlines it when that's what you
+  // clicked. Not persisted; after a restart the header shows the name.
+  property bool p2pRequested: false
+  readonly property bool currentP2p: !!(currentPlace && currentPlace.p2p === true)
+
   function connectTo(args, label, target, auto) {
     if (!installed || !signedIn || busy) return
+    p2pRequested = args.indexOf("--p2p") !== -1
     _autoAttempt = auto === true
     _desired = 1
     _expectDown = false

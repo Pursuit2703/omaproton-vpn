@@ -144,12 +144,16 @@ def locate(data, name):
         if (s.get("Name") or "").upper() != want:
             continue
         loc = s.get("Location") or {}
+        features = s.get("Features") or 0
         place = {
             "name": s.get("Name") or "",
             "code": (s.get("ExitCountry") or "").upper(),
             "city": (s.get("City") or "").strip(),
             "lat": loc.get("Lat"),
             "lon": loc.get("Long"),
+            # Feature bit 4 is P2P. Most servers permit it, so the panel only
+            # makes a point of it when that's what you asked for.
+            "p2p": bool(features & P2P),
         }
         entry_code = (s.get("EntryCountry") or "").upper()
         if (s.get("Features") or 0) & SECURE_CORE and entry_code and entry_code != place["code"]:

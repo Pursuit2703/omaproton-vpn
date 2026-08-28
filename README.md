@@ -192,6 +192,16 @@ pick a country here; Proton picks the best match for you.
 Rows marked **PLUS** need a paid plan. On a free plan they fail with a clear
 "Requires a Proton VPN Plus plan", nothing breaks.
 
+After a **P2P** connect the header reads "󰒗 P2P · US-TX#40" and the Server
+row "US-TX#40 · P2P", so you can see the click landed. Most Proton servers permit P2P, so the panel only makes a
+point of it when that's what you asked for.
+
+While you're on Secure Core the panel says so three ways: the header reads
+"󰦝 Secure Core · CH → US#3" (the entry country, then the exit server), the
+Server row reads "CH → US#3 · Secure Core", the Secure Core row carries an
+**ACTIVE** tag, and the map draws the route from the entry country to the city
+you exit from.
+
 ### Two tabs: Connections and Protection
 
 Under Quick Connect sit two tabs, in the same pill style as Omarchy's network
@@ -489,7 +499,9 @@ signing out also disconnects.
 
 If the VPN drops unexpectedly you get a desktop notification, "VPN
 Disconnected, You're no longer protected." Connecting shows "VPN Connected"
-with the server and the protocol. Turn both off in the widget's settings if you'd rather not.
+with the server and the protocol. Neither shows while the panel is open, since
+the panel already tells you. Turn both off in the widget's settings if you'd
+rather not.
 
 ## Settings
 

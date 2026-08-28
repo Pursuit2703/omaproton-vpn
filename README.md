@@ -50,8 +50,8 @@ into the CLI's own prompt, and Proton's client owns the session from there.
 - [How to use it](#how-to-use-it): the bar icon, the map, quick connect,
   countries and cities, traffic, [keyboard](#keyboard)
 - [How the protections work](#how-the-protections-work): Kill Switch,
-  NetShield, Always On, split tunneling, and
-  [why the first and last can't both be on](#why-the-kill-switch-and-split-tunneling-cant-both-be-on)
+  NetShield, Always On, [port forwarding](#port-forwarding), split tunneling,
+  and [why the Kill Switch and split tunneling can't both be on](#why-the-kill-switch-and-split-tunneling-cant-both-be-on)
 - [Settings](#settings)
 - [Security and privacy](#security-and-privacy)
 - [Notes](#notes), [Credits](#credits), [License](#license)
@@ -129,8 +129,9 @@ protonvpn disconnect
 protonvpn signout
 ```
 
-The widget also keeps a small file of your recent locations at
-`~/.local/state/omarchy-protonvpn/state.json`; delete it if you like.
+The widget also keeps a small folder of its own at
+`~/.local/state/omarchy-protonvpn/` (your recent locations and the icon it
+uses in notifications); delete it if you like.
 
 ## How to use it
 
@@ -164,6 +165,11 @@ The map doesn't show *your* location or draw a line to the server, the way the
 Proton app does. Finding your location would take a geo-IP lookup, which this
 plugin promises never to make. Lighting up the exit city is the honest version.
 
+On a Secure Core connection the map does draw the route: a dashed arc from the
+entry country (Switzerland, Iceland or Sweden, ringed) to the city you exit
+from, just like the Proton app. Both ends are Proton servers named in the
+server cache, so no lookup about you is involved.
+
 ### The power switch
 
 The switch at the top of the panel is the same toggle as right-click. When off,
@@ -187,12 +193,23 @@ pick a country here; Proton picks the best match for you.
 Rows marked **PLUS** need a paid plan. On a free plan they fail with a clear
 "Requires a Proton VPN Plus plan", nothing breaks.
 
+After a **P2P** connect the header reads "󰒗 P2P · US-TX#40" and the Server
+row "US-TX#40 · P2P", so you can see the click landed. Most Proton servers permit P2P, so the panel only makes a
+point of it when that's what you asked for.
+
+While you're on Secure Core the panel says so three ways: the header reads
+"󰦝 Secure Core · CH → US#3" (the entry country, then the exit server), the
+Server row reads "CH → US#3 · Secure Core", the Secure Core row carries an
+**ACTIVE** tag, and the map draws the route from the entry country to the city
+you exit from.
+
 ### Two tabs: Connections and Protection
 
 Under Quick Connect sit two tabs, in the same pill style as Omarchy's network
 panel. **Connections** holds everywhere you can go: recent places, and the
 country and city lists. **Protection** holds everything about *how* you're
-protected: the Kill Switch, NetShield, Always On, split tunneling, and your
+protected: the Kill Switch, NetShield, Always On, port forwarding, split
+tunneling, and your
 account. The tab you pick stays until you close the panel.
 
 The Protection tab has enough rules behind it to deserve its own chapter:
@@ -248,6 +265,10 @@ The **Server** line updates within seconds from NetworkManager even while a
 connect is still in progress. The other rows come from the CLI and can lag a
 moment behind.
 
+With [port forwarding](#port-forwarding) on and a P2P server connected, a
+**Forwarded port** row appears. Click it to copy the number; it reads "Copied"
+for a moment. Paste it into your torrent client's listening port.
+
 ### Traffic
 
 <img src="docs/traffic.png" width="360" alt="Download and upload rates with the 60-second sparkline and session totals">
@@ -290,8 +311,9 @@ connection.
 
 `Enter` on **Mode** or **Apps** opens that picker, which then owns the
 keyboard: inside the Apps list, typing filters it, arrows move, `Enter` ticks,
-and `Esc` closes it again. The Kill Switch dialog works the same way: arrows
-move between Cancel and confirm, `Enter` chooses, `Esc` cancels.
+and `Esc` closes it again. The Kill Switch and Port forwarding dialogs work
+the same way: arrows move between Cancel and confirm, `Enter` chooses, `Esc`
+cancels.
 
 Hover only moves the selection when you actually move the pointer. Scrolling
 with the keyboard slides rows under a stationary mouse, and without that rule
@@ -299,15 +321,16 @@ the row that lands under the pointer would drag the selection back to itself.
 
 ## How the protections work
 
-<img src="docs/protection-tab.png" width="360" alt="The Protection tab: Kill Switch, NetShield, Always On and split tunneling switches, the Mode and Apps pickers, account, and sign out">
+<img src="docs/protection-tab.png" width="360" alt="The Protection tab: Kill Switch, NetShield, Always On, Port forwarding and split tunneling switches, account, and sign out">
 
-Four switches, three owners. Knowing who owns each one explains most of how
+Five switches, three owners. Knowing who owns each one explains most of how
 they behave:
 
 | Switch | Saved by | Where | Needs |
 | --- | --- | --- | --- |
 | **Kill Switch** | Proton CLI (`protonvpn config set`) | Proton's settings | Tunnel down to change |
 | **NetShield** | Proton CLI (`protonvpn config set`) | Proton's settings | Plus plan for ads and trackers |
+| **Port forwarding** | Proton CLI (`protonvpn config set`) | Proton's settings | Plus plan, and a P2P server for a port |
 | **Always On** | This widget | `~/.local/state/omarchy-protonvpn/state.json` | Nothing |
 | **Split tunneling** | This widget, editing Proton's file | `~/.config/Proton/VPN/settings.json` | Kill Switch off |
 
@@ -357,6 +380,25 @@ Always On and the Kill Switch are different answers to the same question.
 The Kill Switch stops traffic leaking *while* the tunnel is down; Always On
 makes the tunnel come *back*. Together they close the gap from both sides:
 nothing leaks, and you're not stuck offline.
+
+### Port forwarding
+
+For torrent clients. When on, connecting to a **P2P server** (Quick connect →
+P2P, or any city whose servers carry the P2P flag) asks Proton for an inbound
+port, and the panel shows it as a **Forwarded port** row you click to copy. On
+any other server there is no port and the switch says so. Turning it on asks
+first, like the Kill Switch does, because it opens an inbound port on your VPN
+address and sends whatever arrives there to this computer. Turning it off is
+immediate.
+
+Proton hands the port out over NAT-PMP from the tunnel gateway and drops it
+unless it's renewed, which is why Proton's guide has you run a `natpmpc` loop
+in a terminal. The switch is that loop: while it's on and the tunnel is up,
+the widget renews the mapping every 45 seconds with a small script of its own
+(`port.py`, standard library only, no `natpmpc` to install). Turn it off and
+the renewals stop. Off by default: a forwarded port is an open inbound door,
+and nobody gets one without asking. Paid plans only, like the other Proton
+features.
 
 ### Split tunneling
 
@@ -446,6 +488,9 @@ VPN with the setting unchanged, never stranded off it.
 | Only one app private (a torrent client, a browser for one site) | Off | Include that app | Your call |
 | Nothing automatic; I connect by hand | Off | Off | Off |
 
+Torrenting with a reachable port is any of these rows plus
+[port forwarding](#port-forwarding) on and a P2P server.
+
 Note the second and third rows have the Kill Switch off, because they have to.
 If that one app is a bank that blocks VPN IPs, consider whether a second
 browser profile without the VPN is a better fit than a hole in the tunnel.
@@ -458,9 +503,11 @@ signing out also disconnects.
 
 ### Notifications
 
-If the VPN drops unexpectedly you get a desktop notification, "Proton VPN
-disconnected, You're no longer protected." Connecting shows "Protected" with
-the server. Turn both off in the widget's settings if you'd rather not.
+If the VPN drops unexpectedly you get a desktop notification, "VPN
+Disconnected, You're no longer protected." Connecting shows "VPN Connected"
+with the server and the protocol. Neither shows while the panel is open, since
+the panel already tells you. Turn both off in the widget's settings if you'd
+rather not.
 
 ## Settings
 
@@ -468,7 +515,7 @@ Configurable from Omarchy's widget settings:
 
 | Setting | Default | What it controls |
 | --- | --- | --- |
-| Desktop notifications | On | "Protected" on connect; "disconnected" if the tunnel drops unexpectedly. |
+| Desktop notifications | On | "VPN Connected" with the server and protocol on connect; "VPN Disconnected" if the tunnel drops unexpectedly. Not shown while the panel is open, since the panel already says so. |
 | Status refresh interval | 30 s | How often `protonvpn status` runs for the detail rows while the panel is closed. Open panel: every 5 s. |
 | Link watch interval | 4 s | How often `nmcli` is polled for the bar icon. |
 
@@ -489,7 +536,12 @@ This plugin runs unsandboxed inside the Omarchy shell process, like every
 Omarchy plugin. It:
 
 - stores no credentials, tokens, or account data
-- makes no network requests of its own
+- makes no network requests of its own, with one exception you switch on:
+  with port forwarding on and the tunnel up, `port.py` sends a NAT-PMP renewal
+  to the VPN gateway (`10.2.0.1`, inside the tunnel) every 45 seconds. That is
+  the same exchange Proton's own guide has you run, it goes nowhere else, and
+  the answer is only shown in the panel and copied to the clipboard when you
+  click it
 - never asks for root, the CLI install runs through Omarchy's own installer
   in a terminal that owns the password prompt
 - never downloads or executes remote code
@@ -498,9 +550,10 @@ Omarchy plugin. It:
 - reads Proton's server cache read-only (city list, coordinates, and the map's
   connected-city lookup all come from it), reads the tunnel's byte counters
   under `/sys/class/net/` once a second while the panel is open, and writes
-  one file of its own
-  (`~/.local/state/omarchy-protonvpn/state.json`: recent location labels,
-  whether you dismissed the Kill Switch prompt, and whether Always On is on)
+  two files of its own under `~/.local/state/omarchy-protonvpn/`
+  (`state.json`: recent location labels, whether you dismissed the Kill
+  Switch prompt, and whether Always On is on; `notification-icon.svg`: the
+  Proton mark in your theme's colour, for the notification)
 - writes one file that isn't its own, and only if you turn split tunneling on:
   `~/.config/Proton/VPN/settings.json`, Proton's own settings. Rules below.
 
@@ -512,10 +565,11 @@ allow-list, letters, digits, and `. _ + @ -` only, and single-quoted before
 it goes anywhere; anything else is refused with a message, not escaped. The
 terminal runs non-interactively, so nothing lands in your shell history.
 
-**Settings writes.** The Kill Switch and NetShield switches run
+**Settings writes.** The Kill Switch, NetShield and port forwarding switches run
 `protonvpn config set`. The widget will only ever pass `kill-switch` ∈
-`{off, standard}` and `netshield` ∈ `{off, malware-only, malware-ads-trackers}`;
-no other key or value can reach the CLI from this code.
+`{off, standard}`, `netshield` ∈ `{off, malware-only, malware-ads-trackers}`
+and `port-forwarding` ∈ `{off, on}`; no other key or value can reach the CLI
+from this code.
 
 **Writing Proton's settings file.** Split tunneling is the one feature with no
 CLI command behind it, so the widget edits `~/.config/Proton/VPN/settings.json`
@@ -553,8 +607,9 @@ when its own cache has expired, server loads every ~15 minutes, the full list
 every ~3 hours, and only while connected. The widget's polling doesn't add API
 traffic beyond what the client already does on its own schedule.
 
-**Notifications** go through `notify-send` and contain only the connection
-state and server name.
+**Notifications** are sent straight to the desktop notification service over
+D-Bus and contain only the connection state, the server and its location, and
+the protocol.
 
 **On screen.** Your Proton account email is shown only under Protection →
 Account, not in the panel's default view, but if you screenshot or

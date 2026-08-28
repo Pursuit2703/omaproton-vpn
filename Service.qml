@@ -91,11 +91,46 @@ Item {
   property bool configLoaded: false
   readonly property bool killSwitchOn: String(config["kill-switch"] || "") === "standard"
   readonly property bool netShieldOn: configLoaded && String(config["netshield"] || "off") !== "off"
+  readonly property bool portForwardingOn: configLoaded && String(config["port-forwarding"] || "off") === "on"
   // The only values setConfig() will ever pass to the CLI.
   readonly property var configValues: ({
     "kill-switch": ["off", "standard"],
-    "netshield": ["off", "malware-only", "malware-ads-trackers"]
+    "netshield": ["off", "malware-only", "malware-ads-trackers"],
+    "port-forwarding": ["off", "on"]
   })
+
+  // The port Proton assigned on a P2P server, or "" when there isn't one.
+  //
+  // Proton hands it out over NAT-PMP on the tunnel gateway and drops the
+  // mapping unless it's renewed, which is why Proton's guide runs natpmpc in
+  // a loop. The CLI's own agent does the same exchange but only while a
+  // `protonvpn` process is alive, so a bare `status` poll rarely completes
+  // it. port.py is that exchange: while the switch is on and the tunnel is
+  // up it runs every 45 s (the guide's cadence against a 60 s lifetime),
+  // which both shows the port and keeps it. It's the one network request
+  // the widget makes, to 10.2.0.1 inside the tunnel, never anywhere else.
+  property string forwardedPort: ""
+  readonly property string portScriptPath: Qt.resolvedUrl("port.py").toString().replace(/^file:\/\//, "")
+  readonly property bool portWanted: portForwardingOn && connected && linkActive && !busy
+
+  onPortWantedChanged: {
+    if (portWanted) refreshPort()
+    else forwardedPort = ""
+  }
+
+  function refreshPort() {
+    if (!portWanted || portProcess.running) return
+    portProcess.command = ["python3", portScriptPath]
+    portProcess.running = true
+  }
+
+  onConnectedChanged: if (!connected) forwardedPort = ""
+
+  // Copy is the only thing the widget ever does with the port.
+  function copyForwardedPort() {
+    if (forwardedPort === "") return
+    Quickshell.execDetached(["wl-copy", "--", forwardedPort])
+  }
 
   // Persisted across restarts: last few places connected to, and whether the
   // kill-switch nudge was dismissed. Location labels only, nothing secret.
@@ -575,6 +610,7 @@ Item {
   // Full protection first; the CLI refuses ads/trackers on a free plan and
   // the retry below steps down to malware-only.
   function toggleNetShield() { setConfig("netshield", netShieldOn ? "off" : "malware-ads-trackers") }
+  function togglePortForwarding() { setConfig("port-forwarding", portForwardingOn ? "off" : "on") }
 
   function dismissNudge() {
     nudgeDismissed = true
@@ -597,8 +633,15 @@ Item {
 
   // target: {key, title, subtitle, args} recorded to recents on success, or
   // null for quick actions that are already one click away.
+  // Whether the current connection was asked for with the P2P row: most
+  // servers permit P2P, so the panel only headlines it when that's what you
+  // clicked. Not persisted; after a restart the header shows the name.
+  property bool p2pRequested: false
+  readonly property bool currentP2p: !!(currentPlace && currentPlace.p2p === true)
+
   function connectTo(args, label, target, auto) {
     if (!installed || !signedIn || busy) return
+    p2pRequested = args.indexOf("--p2p") !== -1
     _autoAttempt = auto === true
     _desired = 1
     _expectDown = false
@@ -672,7 +715,11 @@ Item {
     locateProcess.running = true
   }
 
-  onDisplayServerChanged: locateServer(displayServer)
+  onDisplayServerChanged: {
+    locateServer(displayServer)
+    // A different server means a different port, or none.
+    forwardedPort = ""
+  }
 
   function countryName(code) {
     var c = String(code || "").toUpperCase()
@@ -764,10 +811,42 @@ Item {
     uptimeSec = _linkUpMs > 0 ? Math.floor((now - _linkUpMs) / 1000) : 0
   }
 
+  // The plugin's own mark for the toast, written to the state dir in the
+  // theme's accent colour so it wears every Omarchy theme like the widget
+  // does, and rewritten whenever the theme changes. A themed-icon name was
+  // the wrong tool here: most icon themes don't carry `network-vpn`, and
+  // the shell drew Qt's missing-texture checkerboard in its place (#21).
+  readonly property string notificationIconPath: stateDir + "/notification-icon.svg"
+  readonly property string protonMarkPath: "m10.176 20.058.858-1.28 6.513-9.838c.57-.86.026-2.014-1.005-2.131L.378 4.95l8.373 15.055a.84.84 0 0 0 1.424.052h.001zM23.586 7.14l-9.662 14.61c-1.036 1.567-3.38 1.478-4.293-.162l-.093-.168c.3-.01.594-.086.855-.235a1.85 1.85 0 0 0 .612-.57l.86-1.28 6.516-9.844c.46-.694.525-1.56.173-2.314a2.375 2.375 0 0 0-1.899-1.364L.493 3.956l-.476-.054C-.163 2.392 1.101.95 2.784 1.143l18.991 2.16c1.856.21 2.835 2.289 1.812 3.838z"
+
+  function writeNotificationIcon() {
+    // Qt prints an opaque colour as #rrggbb and a translucent one as
+    // #aarrggbb; SVG wants the former, so drop the alpha if present.
+    var hex = String(Color.accent)
+    if (hex.length === 9) hex = "#" + hex.slice(3)
+    notificationIconFile.setText('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="24" height="24">'
+                                 + '<path fill="' + hex + '" d="' + protonMarkPath + '"/></svg>\n')
+  }
+
   function notify(summary, body, urgency) {
     if (!notificationsOn) return
-    Quickshell.execDetached(["notify-send", "-a", "Proton VPN", "-i", "network-vpn",
-                             "-u", urgency || "normal", summary, body || ""])
+    // The panel already shows the state change in its header and map, so a
+    // toast on top of it is noise. Only notify when the panel isn't open.
+    if (panelOpen) return
+    // Call org.freedesktop.Notifications.Notify directly instead of going
+    // through notify-send or the omarchy-notification-send wrapper: one
+    // process, no argv reparsing of the summary/body, and the omarchy-glyph
+    // hint gives the shell a Nerd Font shield-lock to draw if the SVG isn't
+    // there yet (first launch) or fails to load. Signature: app_name, replaces_id, app_icon, summary,
+    // body, actions, hints, expire_timeout.
+    var level = urgency === "critical" ? "2" : (urgency === "low" ? "0" : "1")
+    Quickshell.execDetached(["busctl", "--user", "--", "call",
+                             "org.freedesktop.Notifications", "/org/freedesktop/Notifications",
+                             "org.freedesktop.Notifications", "Notify", "susssasa{sv}i",
+                             "OmaProton VPN", "0", notificationIconPath, summary, Model.escapeMarkup(body),
+                             "0",
+                             "2", "urgency", "y", level, "omarchy-glyph", "s", "\udb82\udd9d",
+                             "-1"])
   }
 
   function applyStatus(raw) {
@@ -905,6 +984,20 @@ Item {
     refresh()
   }
 
+  // The state dir is created by a detached process, so the icon is written
+  // a moment later rather than racing it on a first launch.
+  Timer {
+    interval: 1000
+    running: true
+    repeat: false
+    onTriggered: root.writeNotificationIcon()
+  }
+
+  Connections {
+    target: Color
+    function onAccentChanged() { root.writeNotificationIcon() }
+  }
+
   onPanelOpenChanged: if (panelOpen) {
     refresh()
     loadCountries(false)
@@ -926,6 +1019,40 @@ Item {
     running: root.panelOpen && root.linkActive && root.linkDevice !== ""
     triggeredOnStart: true
     onTriggered: root.trafficSample()
+  }
+
+  FileView {
+    id: notificationIconFile
+    path: root.notificationIconPath
+    printErrors: false
+    atomicWrites: true
+  }
+
+  Timer {
+    interval: 45000
+    repeat: true
+    running: root.portWanted
+    onTriggered: root.refreshPort()
+  }
+
+  Process {
+    id: portProcess
+    running: false
+    command: []
+    stdout: StdioCollector { id: portStdout; waitForEnd: true }
+    onExited: function(exitCode) {
+      var port = ""
+      try {
+        var out = exitCode === 0 ? JSON.parse(String(portStdout.text || "{}")) : {}
+        if (out && out.port) port = String(out.port)
+      } catch (e) { port = "" }
+      // Digits only, or nothing: this is what goes to the clipboard.
+      if (!/^[1-9][0-9]{0,4}$/.test(port)) port = ""
+      // A missed renewal (one timeout) shouldn't blank the row for 45 s; a
+      // server change already clears it, and no port on a non-P2P server
+      // stays "" because nothing ever set it.
+      if (port !== "" || !root.portWanted) root.forwardedPort = port
+    }
   }
 
   FileView {
@@ -1109,7 +1236,7 @@ Item {
       // of a connect the person just asked for.
       if (was && !link.active) {
         if (!root._expectDown && !actionProcess.running && !connectProcess.running)
-          root.notify("Proton VPN disconnected", "You're no longer protected.", "critical")
+          root.notify("VPN Disconnected \udb83\udfc6", "You're no longer protected.", "critical")
         root._expectDown = false
       }
       root.reconcile()
@@ -1328,7 +1455,12 @@ Item {
           }
         }
         root.recordRecent(target)
-        root.notify("Protected", line, "normal")
+        // "Connected to NL#42 in Amsterdam, Netherlands." -> the server, plus
+        // the protocol the CLI is configured for, since its confirmation
+        // line never names it and `protonvpn status` hasn't run yet.
+        var where = line.replace(/^connected to\s+/i, "").replace(/\.\s*$/, "")
+        var proto = Model.protocolLabel(root.protonSettings ? root.protonSettings["protocol"] : "")
+        root.notify("VPN Connected \udb80\udf3e", [where, proto].filter(function(v) { return v !== "" }).join(" · "), "normal")
         root.loadCities(true)
       }
       // Look at the link now rather than waiting up to watchIntervalSec, so

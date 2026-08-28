@@ -84,6 +84,40 @@ function parseStatus(raw) {
   }
 }
 
+// "CH-US#3", "IS-JP#1", "SE-FR#2": only CH, IS and SE are entry countries.
+function isSecureCore(name) {
+  return /^(CH|IS|SE)-[A-Z]{2}/i.test(String(name || "").trim())
+}
+
+// Secure Core servers are named for both hops: "CH-US#3" enters Switzerland
+// and exits US server 3. Show that as a route, "CH → US#3". Only CH, IS and
+// SE are entry countries, which keeps regional names like "US-TX#40" as-is.
+function routeLabel(name) {
+  var n = String(name || "").trim()
+  var m = n.match(/^(CH|IS|SE)-([A-Z]{2}(?:-[A-Z]{2,3})?)#(\d+)$/i)
+  if (!m) return n
+  return m[1].toUpperCase() + " → " + m[2].toUpperCase() + "#" + m[3]
+}
+
+// settings.json `protocol` -> a label for the panel and notifications.
+function protocolLabel(raw) {
+  var p = String(raw || "").trim().toLowerCase()
+  if (p === "") return ""
+  if (p === "wireguard") return "WireGuard"
+  if (p === "openvpn-udp" || p === "openvpn_udp") return "OpenVPN UDP"
+  if (p === "openvpn-tcp" || p === "openvpn_tcp") return "OpenVPN TCP"
+  if (p.indexOf("openvpn") === 0) return "OpenVPN"
+  // Anything else is shown only if it looks like a protocol name.
+  if (!/^[a-z0-9_-]{1,32}$/.test(p)) return ""
+  return p.charAt(0).toUpperCase() + p.slice(1)
+}
+
+// Notification bodies are rendered as markup by the shell, so text that came
+// from the CLI is escaped before it goes into one.
+function escapeMarkup(s) {
+  return String(s || "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
+}
+
 // `protonvpn info` -> "Account: 'user@example.com'", or "Account: 'None'"
 // while signed out.
 function parseAccount(raw) {

@@ -473,7 +473,7 @@ Configurable from Omarchy's widget settings:
 
 | Setting | Default | What it controls |
 | --- | --- | --- |
-| Desktop notifications | On | "VPN Connected" with the server and protocol on connect; "VPN Disconnected" if the tunnel drops unexpectedly. |
+| Desktop notifications | On | "VPN Connected" with the server and protocol on connect; "VPN Disconnected" if the tunnel drops unexpectedly. Not shown while the panel is open, since the panel already says so. |
 | Status refresh interval | 30 s | How often `protonvpn status` runs for the detail rows while the panel is closed. Open panel: every 5 s. |
 | Link watch interval | 4 s | How often `nmcli` is polled for the bar icon. |
 

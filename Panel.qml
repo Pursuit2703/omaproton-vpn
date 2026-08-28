@@ -760,6 +760,7 @@ Panel {
             visible: vpn.actionStatus !== "" || vpn.lastError !== ""
             width: parent.width
             text: vpn.actionStatus !== "" ? vpn.actionStatus : vpn.lastError
+            textFormat: Text.PlainText
             color: vpn.lastError !== "" && vpn.actionStatus === "" ? root.urgent : root.dim
             font.family: root.fontFamily
             font.pixelSize: Style.font.bodySmall
@@ -1268,6 +1269,7 @@ Panel {
 
             PanelSectionHeader {
               text: root.drilled ? String(vpn.serversCountryName).toUpperCase() : "COUNTRIES"
+              textFormat: Text.PlainText
               foreground: root.foreground
               fontFamily: root.fontFamily
             }
@@ -1419,6 +1421,7 @@ Panel {
         Text {
           Layout.fillWidth: true
           text: actionRow.title
+          textFormat: Text.PlainText
           color: root.foreground
           font.family: root.fontFamily
           font.pixelSize: Style.font.body
@@ -1429,6 +1432,7 @@ Panel {
           Layout.fillWidth: true
           visible: actionRow.subtitle !== ""
           text: actionRow.subtitle
+          textFormat: Text.PlainText
           color: root.dim
           font.family: root.fontFamily
           font.pixelSize: Style.font.caption
@@ -1439,6 +1443,7 @@ Panel {
       Text {
         visible: actionRow.trailing !== ""
         text: actionRow.trailing
+        textFormat: Text.PlainText
         color: root.dim
         font.family: root.fontFamily
         font.pixelSize: Style.font.caption
@@ -1503,6 +1508,7 @@ Panel {
         Text {
           Layout.fillWidth: true
           text: countryRow.country ? countryRow.country.name : ""
+          textFormat: Text.PlainText
           color: root.foreground
           font.family: root.fontFamily
           font.pixelSize: Style.font.body
@@ -1512,6 +1518,7 @@ Panel {
 
       Text {
         text: countryRow.isCurrent ? "󰄬" : (countryRow.country ? countryRow.country.code : "")
+        textFormat: Text.PlainText
         color: countryRow.isCurrent ? root.foreground : root.dim
         font.family: root.fontFamily
         font.pixelSize: Style.font.bodySmall
@@ -1585,6 +1592,7 @@ Panel {
         Text {
           Layout.fillWidth: true
           text: "Fastest in " + vpn.serversCountryName
+          textFormat: Text.PlainText
           color: root.foreground
           font.family: root.fontFamily
           font.pixelSize: Style.font.body
@@ -1662,6 +1670,7 @@ Panel {
         Text {
           Layout.fillWidth: true
           text: serverRow.server ? serverRow.server.city : ""
+          textFormat: Text.PlainText
           color: root.foreground
           font.family: root.fontFamily
           font.pixelSize: Style.font.body
@@ -1670,6 +1679,7 @@ Panel {
 
         Text {
           Layout.fillWidth: true
+          textFormat: Text.PlainText
           text: {
             if (!serverRow.server) return ""
             var bits = [serverRow.server.name]
@@ -1689,6 +1699,7 @@ Panel {
 
       Text {
         text: serverRow.isCurrent ? "󰄬" : (serverRow.server && serverRow.server.load !== undefined && serverRow.server.load !== null ? serverRow.server.load + "%" : "")
+        textFormat: Text.PlainText
         color: {
           if (serverRow.isCurrent) return root.foreground
           var load = serverRow.server ? serverRow.server.load : 0
@@ -1774,6 +1785,7 @@ Panel {
 
   component InfoValue: Text {
     color: root.foreground
+    textFormat: Text.PlainText
     font.family: root.fontFamily
     font.pixelSize: Style.font.bodySmall
     elide: Text.ElideRight

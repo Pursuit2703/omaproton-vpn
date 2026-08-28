@@ -1665,7 +1665,7 @@ Panel {
 
   // An InfoPair you click to copy the value. The value carries a copy glyph
   // and flips to "Copied" for a moment, so a torrent client is one paste away.
-  component CopyPair: Row {
+  component CopyPair: Item {
     id: copyPair
     property string label: ""
     property string value: ""
@@ -1673,16 +1673,25 @@ Panel {
     signal copy()
 
     width: parent.width
-    spacing: Style.space(8)
+    implicitHeight: copyRow.implicitHeight
+    height: implicitHeight
 
-    InfoLabel { text: copyPair.label }
-    Item {
-      width: Math.max(0, parent.width - parent.children[0].implicitWidth - parent.children[2].implicitWidth - parent.spacing * 2)
-      height: 1
-    }
-    InfoValue {
-      text: copyPair.copied ? "Copied" : copyPair.value + "  󰆏"
-      opacity: copyArea.containsMouse || copyPair.copied ? 1.0 : 0.85
+    // A Row can't hold an anchored MouseArea, so the row and the click
+    // target are siblings under this Item.
+    Row {
+      id: copyRow
+      width: parent.width
+      spacing: Style.space(8)
+
+      InfoLabel { text: copyPair.label }
+      Item {
+        width: Math.max(0, parent.width - parent.children[0].implicitWidth - parent.children[2].implicitWidth - parent.spacing * 2)
+        height: 1
+      }
+      InfoValue {
+        text: copyPair.copied ? "Copied" : copyPair.value + "  󰆏"
+        opacity: copyArea.containsMouse || copyPair.copied ? 1.0 : 0.85
+      }
     }
 
     MouseArea {

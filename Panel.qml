@@ -939,14 +939,11 @@ Panel {
                   hasCursor: root.cursorActive && root.focusSection === "quick" && root.quickIndex === index
                   title: modelData.label
                   subtitle: modelData.hint
-                  // ACTIVE when the server you're on has that feature, which
-                  // is what tells you the click landed.
-                  trailing: {
-                    var active = vpn.connected && (
-                      (modelData.key === "securecore" && Model.isSecureCore(vpn.displayServer))
-                      || (modelData.key === "p2p" && vpn.currentP2p))
-                    return active ? "ACTIVE" : (modelData.plus ? "PLUS" : "")
-                  }
+                  // Secure Core gets an ACTIVE tag; P2P doesn't, since most
+                  // servers permit it and the header already says when you
+                  // asked for it.
+                  trailing: modelData.key === "securecore" && vpn.connected && Model.isSecureCore(vpn.displayServer)
+                            ? "ACTIVE" : (modelData.plus ? "PLUS" : "")
                   enabled: !vpn.busy
                   onEntered: root.setCursorFromHover("quick", index)
                   onClicked: root.runQuick(modelData.key)

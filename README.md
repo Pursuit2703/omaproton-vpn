@@ -192,14 +192,15 @@ pick a country here; Proton picks the best match for you.
 Rows marked **PLUS** need a paid plan. On a free plan they fail with a clear
 "Requires a Proton VPN Plus plan", nothing breaks.
 
-After a **P2P** connect the header reads "󰒗 P2P · US-TX#40", so you can see
-the click landed. Most Proton servers permit P2P, so the panel only makes a
+After a **P2P** connect the header reads "󰒗 P2P · US-TX#40" and the Server
+row "US-TX#40 · P2P", so you can see the click landed. Most Proton servers permit P2P, so the panel only makes a
 point of it when that's what you asked for.
 
 While you're on Secure Core the panel says so three ways: the header reads
 "󰦝 Secure Core · CH → US#3" (the entry country, then the exit server), the
-Secure Core row carries an **ACTIVE** tag, and the map draws the route from the
-entry country to the city you exit from.
+Server row reads "CH → US#3 · Secure Core", the Secure Core row carries an
+**ACTIVE** tag, and the map draws the route from the entry country to the city
+you exit from.
 
 ### Two tabs: Connections and Protection
 

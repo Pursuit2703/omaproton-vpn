@@ -817,7 +817,17 @@ Panel {
             width: parent.width
             spacing: Style.spacing.labelGap
 
-            InfoPair { label: "Server"; value: vpn.displayServer }
+            // The server, and the feature it's serving: the route for Secure
+            // Core, P2P when that's what you asked for. Same rule as the header.
+            InfoPair {
+              label: "Server"
+              value: {
+                var name = vpn.displayServer
+                if (Model.isSecureCore(name)) return Model.routeLabel(name) + " · Secure Core"
+                if (vpn.p2pRequested && vpn.currentP2p) return name + " · P2P"
+                return name
+              }
+            }
             InfoPair { visible: vpn.location !== ""; label: "Location"; value: vpn.location }
 
             Repeater {

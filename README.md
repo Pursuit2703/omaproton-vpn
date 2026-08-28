@@ -164,6 +164,11 @@ The map doesn't show *your* location or draw a line to the server, the way the
 Proton app does. Finding your location would take a geo-IP lookup, which this
 plugin promises never to make. Lighting up the exit city is the honest version.
 
+On a Secure Core connection the map does draw the route: a dashed arc from the
+entry country (Switzerland, Iceland or Sweden, ringed) to the city you exit
+from, just like the Proton app. Both ends are Proton servers named in the
+server cache, so no lookup about you is involved.
+
 ### The power switch
 
 The switch at the top of the panel is the same toggle as right-click. When off,

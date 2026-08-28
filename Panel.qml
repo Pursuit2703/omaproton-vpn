@@ -119,8 +119,11 @@ Panel {
     if (vpn.connected) {
       var server = Model.routeLabel(vpn.displayServer)
       if (server === "") return "Protected"
-      // Two hops deserve saying so: shield-lock, the feature, then the route.
-      return Model.isSecureCore(vpn.displayServer) ? "\udb82\udd9d Secure Core · " + server : server
+      // The feature you asked for, then the server: two hops deserve saying
+      // so, and a P2P click should visibly have landed.
+      if (Model.isSecureCore(vpn.displayServer)) return "\udb82\udd9d Secure Core · " + server
+      if (vpn.p2pRequested && vpn.currentP2p) return "\udb81\udc97 P2P · " + server
+      return server
     }
     if (!vpn.accountProbed) return "Checking…"
     if (!vpn.signedIn) return "Signed out"
@@ -936,8 +939,14 @@ Panel {
                   hasCursor: root.cursorActive && root.focusSection === "quick" && root.quickIndex === index
                   title: modelData.label
                   subtitle: modelData.hint
-                  trailing: modelData.key === "securecore" && vpn.connected && Model.isSecureCore(vpn.displayServer)
-                            ? "ACTIVE" : (modelData.plus ? "PLUS" : "")
+                  // ACTIVE when the server you're on has that feature, which
+                  // is what tells you the click landed.
+                  trailing: {
+                    var active = vpn.connected && (
+                      (modelData.key === "securecore" && Model.isSecureCore(vpn.displayServer))
+                      || (modelData.key === "p2p" && vpn.currentP2p))
+                    return active ? "ACTIVE" : (modelData.plus ? "PLUS" : "")
+                  }
                   enabled: !vpn.busy
                   onEntered: root.setCursorFromHover("quick", index)
                   onClicked: root.runQuick(modelData.key)

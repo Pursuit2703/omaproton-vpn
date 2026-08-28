@@ -33,8 +33,11 @@ def mapping(proto):
         try:
             with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as sock:
                 sock.settimeout(timeout)
-                sock.sendto(request, (GATEWAY, PORT))
-                data, _ = sock.recvfrom(64)
+                # Connected, so the kernel only delivers replies from the
+                # gateway and anything else that reaches the port is dropped.
+                sock.connect((GATEWAY, PORT))
+                sock.send(request)
+                data = sock.recv(64)
         except (OSError, socket.timeout):
             timeout *= 2
             continue

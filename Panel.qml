@@ -53,7 +53,7 @@ Panel {
   // asked first.
   readonly property string vpnKs: vpn.config["kill-switch"] || ""
   readonly property alias killSwitchDialog: killSwitchConfirm
-  readonly property int protectionCount: splitDetailVisible ? 7 : 5
+  readonly property int protectionCount: splitDetailVisible ? 8 : 6
   readonly property int signOutIndex: protectionCount - 1
 
   // App paths Proton's file already holds that the scan no longer finds, kept
@@ -294,9 +294,10 @@ Panel {
       if (protectionIndex === 0) requestKillSwitch()
       else if (protectionIndex === 1) vpn.toggleNetShield()
       else if (protectionIndex === 2) vpn.toggleAutoConnect()
-      else if (protectionIndex === 3) vpn.toggleSplitTunnel()
-      else if (splitDetailVisible && protectionIndex === 4) splitModeRow.toggle()
-      else if (splitDetailVisible && protectionIndex === 5) splitAppsRow.toggle()
+      else if (protectionIndex === 3) requestPortForwarding()
+      else if (protectionIndex === 4) vpn.toggleSplitTunnel()
+      else if (splitDetailVisible && protectionIndex === 5) splitModeRow.toggle()
+      else if (splitDetailVisible && protectionIndex === 6) splitAppsRow.toggle()
       else requestSignOut()
     }
     else if (focusSection === "recents") { vpn.connectRecent(recentIndex); showConnection() }
@@ -339,6 +340,18 @@ Panel {
     focusSection = "header"
     if (panelFlick) panelFlick.contentY = 0
   }
+
+  // Turning port forwarding on opens an inbound door; that deserves a
+  // sentence and a click. Turning it off just closes it.
+  function requestPortForwarding() {
+    if (vpn.portForwardingOn) { vpn.togglePortForwarding(); return }
+    portForwardConfirm.selectedIndex = 0
+    portForwardConfirm.opened = true
+  }
+
+  // Whichever dimmed dialog is up owns the keyboard.
+  readonly property var openDialog: killSwitchConfirm.opened ? killSwitchConfirm
+                                   : (portForwardConfirm.opened ? portForwardConfirm : null)
 
   // Disconnected there is nothing to interrupt, so the change just happens.
   // Connected, it costs a reconnect, and that is what the dialog is for.
@@ -495,6 +508,8 @@ Panel {
         splitTunneling: vpn.splitOn ? vpn.splitMode : "off",
         splitApps: vpn.splitApps.length,
         netshield: vpn.config["netshield"] || "",
+        portForwarding: vpn.config["port-forwarding"] || "",
+        forwardedPort: vpn.forwardedPort,
         countries: vpn.countries.length,
         recents: vpn.recents.length,
         cities: vpn.cities.length,
@@ -563,24 +578,24 @@ Panel {
       onMoveRequested: function(dx, dy) {
         // A dialog with the screen dimmed behind it owns the keyboard, or the
         // cursor would be moving around underneath it unseen.
-        if (killSwitchConfirm.opened) {
-          killSwitchConfirm.selectedIndex = killSwitchConfirm.selectedIndex === 0 ? 1 : 0
+        if (root.openDialog) {
+          root.openDialog.selectedIndex = root.openDialog.selectedIndex === 0 ? 1 : 0
           return
         }
         if (!root.cursorActive) { root.cursorActive = true; return }
         root.moveCursor(dx, dy)
       }
       onActivateRequested: {
-        if (killSwitchConfirm.opened) {
-          if (killSwitchConfirm.selectedIndex === 0) killSwitchConfirm.canceled()
-          else killSwitchConfirm.confirmed()
+        if (root.openDialog) {
+          if (root.openDialog.selectedIndex === 0) root.openDialog.canceled()
+          else root.openDialog.confirmed()
           return
         }
         if (root.cursorActive) root.activateCursor()
       }
       // Inside a drill, escape backs out one level before it closes the panel.
       onCloseRequested: {
-        if (killSwitchConfirm.opened) { killSwitchConfirm.canceled(); return }
+        if (root.openDialog) { root.openDialog.canceled(); return }
         root.drilled ? root.drillOut() : root.close()
       }
       onTabRequested: function(direction) { root.switchPanel(direction) }
@@ -625,6 +640,21 @@ Panel {
         fontFamily: root.fontFamily
         onCanceled: opened = false
         onConfirmed: { opened = false; vpn.toggleKillSwitch() }
+      }
+
+      ConfirmDialog {
+        id: portForwardConfirm
+        anchors.fill: parent
+        z: 100
+        message: "Port forwarding opens an inbound port on your VPN address and sends "
+          + "whatever arrives on it to this computer. It's for torrent clients and only "
+          + "works on P2P servers. Turn it off again when you're done."
+        cancelText: "Cancel"
+        confirmText: "Turn on"
+        foreground: root.foreground
+        fontFamily: root.fontFamily
+        onCanceled: opened = false
+        onConfirmed: { opened = false; vpn.togglePortForwarding() }
       }
 
       Flickable {
@@ -814,6 +844,13 @@ Panel {
 
             InfoPair { label: "Server"; value: vpn.displayServer }
             InfoPair { visible: vpn.location !== ""; label: "Location"; value: vpn.location }
+            CopyPair {
+              visible: vpn.forwardedPort !== ""
+              label: "Forwarded port"
+              value: vpn.forwardedPort
+              copied: root.portCopied
+              onCopy: root.copyPort()
+            }
 
             Repeater {
               model: vpn.fields
@@ -1040,6 +1077,28 @@ Panel {
                 onClicked: { root.clearHighlight(); vpn.toggleAutoConnect() }
               }
 
+              Toggle {
+                width: parent.width
+                label: "Port forwarding"
+                description: {
+                  var applying = vpn.configPendingLabel("port-forwarding")
+                  if (applying !== "") return applying
+                  if (!vpn.configLoaded) return "Loading…"
+                  if (!vpn.portForwardingOn) return "For torrent clients, on P2P servers"
+                  if (vpn.forwardedPort !== "") return "Port " + vpn.forwardedPort + " on this server"
+                  if (vpn.connected) return "Needs a P2P server: Quick connect → P2P"
+                  return "Connect to a P2P server to get a port"
+                }
+                checked: vpn.portForwardingOn
+                enabled: vpn.configLoaded && vpn.configPending === ""
+                hasCursor: root.cursorActive && root.focusSection === "protection" && root.protectionIndex === 3
+                foreground: root.foreground
+                fontFamily: root.fontFamily
+                onHovered: function(on) { if (on) root.setCursorFromHover("protection", 3) }
+                onClicked: { root.clearHighlight(); root.requestPortForwarding() }
+              }
+
+
               // Proton skips split tunneling entirely while the kill switch
               // is on, so the row says that instead of offering a switch that
               // would look on and do nothing.
@@ -1049,10 +1108,10 @@ Panel {
                 description: vpn.splitDescription()
                 checked: vpn.splitActive
                 enabled: vpn.splitAvailable && !vpn.splitBlocked
-                hasCursor: root.cursorActive && root.focusSection === "protection" && root.protectionIndex === 3
+                hasCursor: root.cursorActive && root.focusSection === "protection" && root.protectionIndex === 4
                 foreground: root.foreground
                 fontFamily: root.fontFamily
-                onHovered: function(on) { if (on) root.setCursorFromHover("protection", 3) }
+                onHovered: function(on) { if (on) root.setCursorFromHover("protection", 4) }
                 onClicked: { root.clearHighlight(); vpn.toggleSplitTunnel() }
               }
 
@@ -1066,10 +1125,10 @@ Panel {
                   { value: "exclude", label: "Exclude: chosen apps skip the VPN" },
                   { value: "include", label: "Include: only chosen apps use the VPN" }
                 ]
-                hasCursor: root.cursorActive && root.focusSection === "protection" && root.protectionIndex === 4
+                hasCursor: root.cursorActive && root.focusSection === "protection" && root.protectionIndex === 5
                 foreground: root.foreground
                 fontFamily: root.fontFamily
-                onHovered: function(on) { if (on) root.setCursorFromHover("protection", 4) }
+                onHovered: function(on) { if (on) root.setCursorFromHover("protection", 5) }
                 onChanged: function(value) { vpn.setSplitMode(value) }
               }
 
@@ -1088,10 +1147,10 @@ Panel {
                 placeholderText: "Search apps..."
                 emptyText: "No apps found"
                 noSelectionText: "None chosen"
-                hasCursor: root.cursorActive && root.focusSection === "protection" && root.protectionIndex === 5
+                hasCursor: root.cursorActive && root.focusSection === "protection" && root.protectionIndex === 6
                 foreground: root.foreground
                 fontFamily: root.fontFamily
-                onHovered: function(on) { if (on) root.setCursorFromHover("protection", 5) }
+                onHovered: function(on) { if (on) root.setCursorFromHover("protection", 6) }
                 onChanged: function(values) { vpn.setSplitApps(values) }
               }
 
@@ -1620,6 +1679,55 @@ Panel {
         font.pixelSize: Style.font.bodySmall
         Layout.alignment: Qt.AlignVCenter
       }
+    }
+  }
+
+  // A 2 s "Copied" flash on the forwarded port row.
+  property bool portCopied: false
+  Timer { id: portCopiedTimer; interval: 2000; onTriggered: root.portCopied = false }
+  function copyPort() {
+    vpn.copyForwardedPort()
+    portCopied = true
+    portCopiedTimer.restart()
+  }
+
+  // An InfoPair you click to copy the value. The value carries a copy glyph
+  // and flips to "Copied" for a moment, so a torrent client is one paste away.
+  component CopyPair: Item {
+    id: copyPair
+    property string label: ""
+    property string value: ""
+    property bool copied: false
+    signal copy()
+
+    width: parent.width
+    implicitHeight: copyRow.implicitHeight
+    height: implicitHeight
+
+    // A Row can't hold an anchored MouseArea, so the row and the click
+    // target are siblings under this Item.
+    Row {
+      id: copyRow
+      width: parent.width
+      spacing: Style.space(8)
+
+      InfoLabel { text: copyPair.label }
+      Item {
+        width: Math.max(0, parent.width - parent.children[0].implicitWidth - parent.children[2].implicitWidth - parent.spacing * 2)
+        height: 1
+      }
+      InfoValue {
+        text: copyPair.copied ? "Copied" : copyPair.value + "  󰆏"
+        opacity: copyArea.containsMouse || copyPair.copied ? 1.0 : 0.85
+      }
+    }
+
+    MouseArea {
+      id: copyArea
+      anchors.fill: parent
+      hoverEnabled: true
+      cursorShape: Qt.PointingHandCursor
+      onClicked: copyPair.copy()
     }
   }
 

@@ -91,11 +91,46 @@ Item {
   property bool configLoaded: false
   readonly property bool killSwitchOn: String(config["kill-switch"] || "") === "standard"
   readonly property bool netShieldOn: configLoaded && String(config["netshield"] || "off") !== "off"
+  readonly property bool portForwardingOn: configLoaded && String(config["port-forwarding"] || "off") === "on"
   // The only values setConfig() will ever pass to the CLI.
   readonly property var configValues: ({
     "kill-switch": ["off", "standard"],
-    "netshield": ["off", "malware-only", "malware-ads-trackers"]
+    "netshield": ["off", "malware-only", "malware-ads-trackers"],
+    "port-forwarding": ["off", "on"]
   })
+
+  // The port Proton assigned on a P2P server, or "" when there isn't one.
+  //
+  // Proton hands it out over NAT-PMP on the tunnel gateway and drops the
+  // mapping unless it's renewed, which is why Proton's guide runs natpmpc in
+  // a loop. The CLI's own agent does the same exchange but only while a
+  // `protonvpn` process is alive, so a bare `status` poll rarely completes
+  // it. port.py is that exchange: while the switch is on and the tunnel is
+  // up it runs every 45 s (the guide's cadence against a 60 s lifetime),
+  // which both shows the port and keeps it. It's the one network request
+  // the widget makes, to 10.2.0.1 inside the tunnel, never anywhere else.
+  property string forwardedPort: ""
+  readonly property string portScriptPath: Qt.resolvedUrl("port.py").toString().replace(/^file:\/\//, "")
+  readonly property bool portWanted: portForwardingOn && connected && linkActive && !busy
+
+  onPortWantedChanged: {
+    if (portWanted) refreshPort()
+    else forwardedPort = ""
+  }
+
+  function refreshPort() {
+    if (!portWanted || portProcess.running) return
+    portProcess.command = ["python3", portScriptPath]
+    portProcess.running = true
+  }
+
+  onConnectedChanged: if (!connected) forwardedPort = ""
+
+  // Copy is the only thing the widget ever does with the port.
+  function copyForwardedPort() {
+    if (forwardedPort === "") return
+    Quickshell.execDetached(["wl-copy", forwardedPort])
+  }
 
   // Persisted across restarts: last few places connected to, and whether the
   // kill-switch nudge was dismissed. Location labels only, nothing secret.
@@ -575,6 +610,7 @@ Item {
   // Full protection first; the CLI refuses ads/trackers on a free plan and
   // the retry below steps down to malware-only.
   function toggleNetShield() { setConfig("netshield", netShieldOn ? "off" : "malware-ads-trackers") }
+  function togglePortForwarding() { setConfig("port-forwarding", portForwardingOn ? "off" : "on") }
 
   function dismissNudge() {
     nudgeDismissed = true
@@ -672,7 +708,11 @@ Item {
     locateProcess.running = true
   }
 
-  onDisplayServerChanged: locateServer(displayServer)
+  onDisplayServerChanged: {
+    locateServer(displayServer)
+    // A different server means a different port, or none.
+    forwardedPort = ""
+  }
 
   function countryName(code) {
     var c = String(code || "").toUpperCase()
@@ -971,6 +1011,31 @@ Item {
     path: root.notificationIconPath
     printErrors: false
     atomicWrites: true
+  }
+
+  Timer {
+    interval: 45000
+    repeat: true
+    running: root.portWanted
+    onTriggered: root.refreshPort()
+  }
+
+  Process {
+    id: portProcess
+    running: false
+    command: []
+    stdout: StdioCollector { id: portStdout; waitForEnd: true }
+    onExited: function(exitCode) {
+      var port = ""
+      try {
+        var out = exitCode === 0 ? JSON.parse(String(portStdout.text || "{}")) : {}
+        if (out && out.port) port = String(out.port)
+      } catch (e) { port = "" }
+      // A missed renewal (one timeout) shouldn't blank the row for 45 s; a
+      // server change already clears it, and no port on a non-P2P server
+      // stays "" because nothing ever set it.
+      if (port !== "" || !root.portWanted) root.forwardedPort = port
+    }
   }
 
   FileView {

@@ -193,6 +193,7 @@ Item {
     Text {
       id: labelText
       anchors.centerIn: parent
+      textFormat: Text.PlainText
       text: root.hovered ? (root.hovered.city + ", " + root.hovered.code
                             + (root.hovered.load !== undefined && root.hovered.load !== null ? "  ·  " + root.hovered.load + "%" : ""))
                          : ""

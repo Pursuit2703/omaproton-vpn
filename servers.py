@@ -181,6 +181,13 @@ def main():
         return
     code = sys.argv[1].strip().upper()
     limit = int(sys.argv[2]) if len(sys.argv) > 2 else 80
+    # Set by the caller once it knows the account is Free (account_tier.py):
+    # a Free account can't use a Plus-only server no matter how good its
+    # score is, so showing the *best-scored* server per city can silently
+    # hide a real, connectable free one behind a dead end. A Plus account
+    # passes nothing here and keeps seeing the genuinely fastest server per
+    # city, unchanged.
+    prefer_free = len(sys.argv) > 3 and sys.argv[3] == "1"
 
     # city -> best server seen so far, plus a count of that city's servers.
     cities = {}
@@ -205,6 +212,11 @@ def main():
         score = score if score is not None else 9e9
         load = s.get("Load")
         load = load if load is not None else 999
+        tier = s.get("Tier")
+        # Free (tier 0) sorts ahead of anything else when prefer_free is on;
+        # otherwise every server ranks equally on this axis and score alone
+        # decides, exactly like before.
+        rank = (0 if (prefer_free and tier == 0) else 1, score)
 
         entry = cities.get(city)
         if entry is None:
@@ -212,26 +224,27 @@ def main():
                 "city": city,
                 "name": s.get("Name") or "",
                 "load": s.get("Load"),
-                "tier": s.get("Tier"),
-                "score": score,
+                "tier": tier,
+                "rank": rank,
                 "tags": labels(features),
                 "count": 1,
             }
             continue
 
         entry["count"] += 1
-        # Score is Proton's own "fastest" metric (lower is better) and is what
-        # the CLI sorts on; load breaks ties.
-        if (score, load) < (entry["score"], entry["load"] if entry["load"] is not None else 999):
+        # rank is (free-first flag, score); load breaks a tie within that.
+        if (rank, load) < (entry["rank"], entry["load"] if entry["load"] is not None else 999):
             entry.update({
                 "name": s.get("Name") or "",
                 "load": s.get("Load"),
-                "tier": s.get("Tier"),
-                "score": score,
+                "tier": tier,
+                "rank": rank,
                 "tags": labels(features),
             })
 
-    rows = sorted(cities.values(), key=lambda r: r["score"])
+    rows = sorted(cities.values(), key=lambda r: r["rank"])
+    for r in rows:
+        del r["rank"]
     print(json.dumps(rows[:limit], separators=(",", ":")))
 
 

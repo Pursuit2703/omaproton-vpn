@@ -271,8 +271,17 @@ Panel {
     { key: "tor", label: "Tor", hint: "Tor over VPN", plus: true }
   ]
 
-  readonly property var filteredCountries: Model.filterCountries(vpn.countries, filterQuery)
   readonly property var freeCountryCodes: Model.freeCountryCodes(vpn.cities)
+  // On a Free account, free countries sort first (still one flat list —
+  // the keyboard cursor's index math is unaffected, the panel just draws a
+  // "FREE" header at the boundary and folds the rest under "Other
+  // countries"). A Plus account (or unknown tier) sees the exact list it
+  // always has, untouched.
+  readonly property var _filteredCountriesBase: Model.filterCountries(vpn.countries, filterQuery)
+  readonly property var _groupedCountries: Model.groupCountriesByFree(_filteredCountriesBase, freeCountryCodes)
+  readonly property var filteredCountries: vpn.accountIsFree ? _groupedCountries.ordered : _filteredCountriesBase
+  readonly property int freeCountryCount: vpn.accountIsFree ? _groupedCountries.freeCount : 0
+  property bool otherCountriesExpanded: false
 
   // Offered once, until turned on or dismissed. The CLI ships with the kill
   // switch off, which means a dropped tunnel silently exposes the user.
@@ -725,6 +734,8 @@ Panel {
         pinFailed: vpn._autoPinFailed,
         drilledInto: vpn.serversCountry,
         servers: vpn.servers.length,
+        accountTier: vpn.accountTier,
+        freeCountryCount: root.freeCountryCount,
         lastError: vpn.lastError
       })
     }
@@ -1753,9 +1764,63 @@ Panel {
               horizontalAlignment: Text.AlignHCenter
             }
 
+            // Free account: free countries first under their own header,
+            // everything else folded under a collapsible "Other countries"
+            // — ~150 countries listed, a handful actually usable, so the
+            // ones that are stay in view by default instead of requiring a
+            // scroll past most of the list to confirm they exist. Plus (or
+            // unknown tier) falls through to the plain flat list below,
+            // completely unchanged.
+            Column {
+              id: freeCountryColumn
+              visible: !root.drilled && vpn.accountIsFree && root.freeCountryCount > 0
+              width: parent.width
+              spacing: Style.space(6)
+
+              PanelSectionHeader {
+                text: "FREE"
+                foreground: root.foreground
+                fontFamily: root.fontFamily
+              }
+
+              Repeater {
+                model: root.filteredCountries.slice(0, root.freeCountryCount)
+                CountryRow {
+                  required property var modelData
+                  required property int index
+                  width: freeCountryColumn.width
+                  country: modelData
+                  rowIndex: index
+                }
+              }
+
+              OtherCountriesHeader {
+                width: parent.width
+                visible: root.filteredCountries.length > root.freeCountryCount
+              }
+
+              Column {
+                id: otherCountryColumn
+                visible: root.otherCountriesExpanded
+                width: parent.width
+                spacing: Style.space(6)
+
+                Repeater {
+                  model: root.filteredCountries.slice(root.freeCountryCount)
+                  CountryRow {
+                    required property var modelData
+                    required property int index
+                    width: otherCountryColumn.width
+                    country: modelData
+                    rowIndex: index + root.freeCountryCount
+                  }
+                }
+              }
+            }
+
             Column {
               id: countryColumn
-              visible: !root.drilled
+              visible: !root.drilled && !(vpn.accountIsFree && root.freeCountryCount > 0)
               width: parent.width
               spacing: Style.space(6)
 
@@ -1967,6 +2032,45 @@ Panel {
 
     onHovered: function(isHovered) { if (isHovered) root.setCursorFromHover("tabs", pill.tabIdx) }
     onClicked: root.setTab(tabKey)   // setTab clears the highlight
+  }
+
+  component OtherCountriesHeader: CursorSurface {
+    id: otherHeader
+    foreground: root.foreground
+    implicitHeight: otherHeaderRow.implicitHeight + Style.spacing.rowPaddingX
+
+    RowLayout {
+      id: otherHeaderRow
+      anchors.left: parent.left
+      anchors.right: parent.right
+      anchors.verticalCenter: parent.verticalCenter
+      anchors.leftMargin: Style.space(10)
+      anchors.rightMargin: Style.space(10)
+      spacing: Style.space(8)
+
+      PanelSectionHeader {
+        text: "OTHER COUNTRIES"
+        foreground: root.foreground
+        fontFamily: root.fontFamily
+      }
+
+      Item { Layout.fillWidth: true }
+
+      Text {
+        text: root.otherCountriesExpanded ? "▾" : "▸"
+        textFormat: Text.PlainText
+        color: root.dim
+        font.family: root.fontFamily
+        font.pixelSize: Style.font.body
+      }
+    }
+
+    MouseArea {
+      anchors.fill: parent
+      hoverEnabled: true
+      cursorShape: Qt.PointingHandCursor
+      onClicked: root.otherCountriesExpanded = !root.otherCountriesExpanded
+    }
   }
 
   component CountryRow: CursorSurface {

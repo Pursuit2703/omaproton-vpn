@@ -844,7 +844,9 @@ Item {
   function loadCities(force) {
     if (!installed || citiesProcess.running) return
     if (citiesLoaded && force !== true) return
-    citiesProcess.command = ["python3", scriptPath, "--cities"]
+    var args = [scriptPath, "--cities"]
+    if (root.accountIsFree) args.push("1")
+    citiesProcess.command = ["python3"].concat(args)
     citiesProcess.running = true
   }
 
@@ -1439,7 +1441,14 @@ Item {
       if (exitCode === 0) {
         try {
           var parsed = JSON.parse(String(accountTierStdout.text || "{}"))
-          if (typeof parsed.tier === "number") root.accountTier = parsed.tier
+          if (typeof parsed.tier === "number" && parsed.tier !== root.accountTier) {
+            root.accountTier = parsed.tier
+            // The cities list already loaded once, before the tier was
+            // known — reload it now so a Free account's copy actually
+            // prefers a Free server per city instead of carrying whatever
+            // the first, tier-blind load happened to pick.
+            root.loadCities(true)
+          }
         } catch (e) {
           // leave accountTier as -1 (unknown) — servers.py's default
           // (score-only, unchanged) behavior is the safe fallback.

@@ -14,9 +14,11 @@ of the list, so you'd scroll past hundreds of near-identical entries before
 seeing a second city. One row per city is the choice a person actually wants
 to make.
 
-Usage: servers.py <COUNTRY_CODE> [limit]   one country's cities, best-first
-       servers.py --cities                  every city worldwide, with lat/long
-       servers.py --locate <SERVER_NAME>    one server's city and coordinates
+Usage: servers.py <COUNTRY_CODE> [limit] [1]  one country's cities, best-first
+                                               (trailing 1: prefer a Free server)
+       servers.py --cities [1]                every city worldwide, with lat/long
+                                               (trailing 1: prefer a Free server)
+       servers.py --locate <SERVER_NAME>       one server's city and coordinates
 Prints compact JSON, or [] / {} when the cache is missing.
 """
 import json
@@ -75,9 +77,19 @@ def usable(s, check_status=True):
     return not ((s.get("Features") or 0) & SECURE_CORE)
 
 
-def all_cities(data):
+def all_cities(data, prefer_free=False):
     """Every city worldwide: one entry per (country, city) with its coordinates
-    and best server. Feeds the panel's mini-map; ~200 rows for ~18k servers."""
+    and best server. Feeds the panel's mini-map and the country list's Free
+    flag; ~200 rows for ~18k servers.
+
+    Same fix as the per-country listing below: picking a city's server by
+    score alone can report a Plus server's tier for a city that also has a
+    Free one, which is exactly backwards for a Free account trying to find
+    out which countries it can actually use — this is what fed
+    freeCountryCodes() an empty set for every country. prefer_free (from
+    account_tier.py) makes a tier-0 server outrank anything else for a city
+    when set; a Plus account (or unknown tier) sees identical results to
+    before."""
     out = {}
     check_status = status_known(data)
     for s in data.get("LogicalServers") or []:
@@ -93,9 +105,11 @@ def all_cities(data):
             continue
         score = s.get("Score")
         score = score if score is not None else 9e9
+        tier = s.get("Tier")
+        rank = (0 if (prefer_free and tier == 0) else 1, score)
         key = (code, city)
         entry = out.get(key)
-        if entry is None or score < entry["score"]:
+        if entry is None or rank < entry["rank"]:
             out[key] = {
                 "code": code,
                 "city": city,
@@ -103,15 +117,15 @@ def all_cities(data):
                 "lon": round(float(lon), 3),
                 "name": s.get("Name") or "",
                 "load": s.get("Load"),
-                "tier": s.get("Tier"),
-                "score": score,
+                "tier": tier,
+                "rank": rank,
                 "count": (entry["count"] + 1) if entry else 1,
             }
         else:
             entry["count"] += 1
     rows = sorted(out.values(), key=lambda r: (r["code"], r["city"]))
     for r in rows:
-        del r["score"]
+        del r["rank"]
     return rows
 
 
@@ -170,7 +184,8 @@ def main():
         return
     data = read_cache()
     if sys.argv[1] == "--cities":
-        print(json.dumps(all_cities(data) if data else [], separators=(",", ":")))
+        prefer_free = len(sys.argv) > 2 and sys.argv[2] == "1"
+        print(json.dumps(all_cities(data, prefer_free) if data else [], separators=(",", ":")))
         return
     if sys.argv[1] == "--locate":
         name = sys.argv[2] if len(sys.argv) > 2 else ""

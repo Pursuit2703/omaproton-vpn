@@ -185,6 +185,7 @@ Item {
 
   readonly property string scriptPath: Qt.resolvedUrl("servers.py").toString().replace(/^file:\/\//, "")
   readonly property string appsScriptPath: Qt.resolvedUrl("apps.py").toString().replace(/^file:\/\//, "")
+  readonly property string connectLocationScriptPath: Qt.resolvedUrl("connect_location.py").toString().replace(/^file:\/\//, "")
 
   property string actionStatus: ""
   property string lastError: ""
@@ -658,6 +659,22 @@ Item {
   property bool p2pRequested: false
   readonly property bool currentP2p: !!(currentPlace && currentPlace.p2p === true)
 
+  // --country/--city/a bare server name are the only cases the stock CLI
+  // blanket-refuses for a Free account (see connect_location.py); --random
+  // and the feature flags are left on the plain CLI path untouched. Returns
+  // null when `args` isn't one of those cases, so the caller falls back to
+  // the normal `protonvpn connect` invocation unchanged.
+  function locationConnectCommand(args) {
+    if (!args || args.length === 0) return null
+    if (args[0] === "--country" || args[0] === "--city") {
+      return ["python3", root.connectLocationScriptPath].concat(args)
+    }
+    if (args.length === 1 && args[0].charAt(0) !== "-") {
+      return ["python3", root.connectLocationScriptPath, args[0]]
+    }
+    return null
+  }
+
   function connectTo(args, label, target, auto) {
     if (!installed || !signedIn || busy) return
     // Any connect that isn't a profile click ends the profile's claim.
@@ -670,7 +687,7 @@ Item {
     pendingLabel = label || "Connecting…"
     actionStatus = pendingLabel
     lastError = ""
-    connectProcess.command = ["protonvpn", "connect"].concat(args || [])
+    connectProcess.command = locationConnectCommand(args) || (["protonvpn", "connect"].concat(args || []))
     connectProcess.running = true
   }
 

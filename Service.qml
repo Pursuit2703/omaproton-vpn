@@ -39,6 +39,12 @@ Item {
   property bool accountProbed: false
   property string account: ""
   property string plan: ""
+  // 0 (Free), 2 (Plus), 3 (PM), or -1 while unknown. Read directly via
+  // account_tier.py rather than the `plan` string above: `protonvpn info`
+  // doesn't print a plan line on every CLI version (this account's 1.0.3
+  // prints only "Account: '<email>'"), which leaves `plan` silently empty.
+  property int accountTier: -1
+  readonly property bool accountIsFree: accountTier === 0
 
   // nmcli-derived, fast
   property bool linkActive: false
@@ -186,6 +192,14 @@ Item {
   readonly property string scriptPath: Qt.resolvedUrl("servers.py").toString().replace(/^file:\/\//, "")
   readonly property string appsScriptPath: Qt.resolvedUrl("apps.py").toString().replace(/^file:\/\//, "")
   readonly property string connectLocationScriptPath: Qt.resolvedUrl("connect_location.py").toString().replace(/^file:\/\//, "")
+  readonly property string accountTierScriptPath: Qt.resolvedUrl("account_tier.py").toString().replace(/^file:\/\//, "")
+  // Bare "python3" resolves to whatever's first on Quickshell's PATH, which
+  // isn't guaranteed to be the interpreter proton-vpn-cli's packages are
+  // installed against — harmless for servers.py/port.py/apps.py (stdlib
+  // only), but connect_location.py and account_tier.py import `click` and
+  // proton's own libraries, so they need the same interpreter the `protonvpn`
+  // binary itself uses.
+  readonly property string pythonBin: "/usr/bin/python3"
 
   property string actionStatus: ""
   property string lastError: ""
@@ -234,7 +248,8 @@ Item {
   property bool _wantAccount: false
   property bool _wantCountries: false
   property bool _wantConfig: false
-  readonly property bool _probesPending: _wantStatus || _wantAccount || _wantCountries || _wantConfig
+  property bool _wantAccountTier: false
+  readonly property bool _probesPending: _wantStatus || _wantAccount || _wantCountries || _wantConfig || _wantAccountTier
   readonly property bool refreshing: statusProcess.running
   // Which config key is mid-change, "" when nothing is, and the value it's
   // heading for. A click costs two CLI runs, `config set` then the `config
@@ -667,10 +682,10 @@ Item {
   function locationConnectCommand(args) {
     if (!args || args.length === 0) return null
     if (args[0] === "--country" || args[0] === "--city") {
-      return ["python3", root.connectLocationScriptPath].concat(args)
+      return [root.pythonBin, root.connectLocationScriptPath].concat(args)
     }
     if (args.length === 1 && args[0].charAt(0) !== "-") {
-      return ["python3", root.connectLocationScriptPath, args[0]]
+      return [root.pythonBin, root.connectLocationScriptPath, args[0]]
     }
     return null
   }
@@ -808,8 +823,22 @@ Item {
     serversCountryName = name || c
     servers = []
     serversLoading = true
-    serversProcess.command = ["python3", scriptPath, c, "80"]
+    var args = [scriptPath, c, "80"]
+    if (root.accountIsFree) args.push("1")
+    serversProcess.command = ["python3"].concat(args)
     serversProcess.running = true
+  }
+
+  // Shares the same take-turns queue as refreshAccount/loadCountries/
+  // loadConfig — it also starts a Controller session against the CLI's
+  // server-cache file, and running one of those alongside another can
+  // race and corrupt it (see the comment on _probeRunning above).
+  function loadAccountTier() {
+    if (!installed || !signedIn) return
+    if (cliBusy) { _wantAccountTier = true; return }
+    _probeRunning = true
+    accountTierProcess.command = [root.pythonBin, root.accountTierScriptPath]
+    accountTierProcess.running = true
   }
 
   function loadCities(force) {
@@ -1252,6 +1281,7 @@ Item {
     if (_wantAccount) { _wantAccount = false; refreshAccount(); return }
     if (_wantConfig) { _wantConfig = false; loadConfig(); return }
     if (_wantCountries) { _wantCountries = false; loadCountries(false); return }
+    if (_wantAccountTier) { _wantAccountTier = false; loadAccountTier(); return }
     if (_wantStatus) { _wantStatus = false; refreshStatus(); return }
   }
 
@@ -1399,6 +1429,26 @@ Item {
   }
 
   Process {
+    id: accountTierProcess
+    running: false
+    command: []
+    stdout: StdioCollector { id: accountTierStdout; waitForEnd: true }
+    onExited: function(exitCode) {
+      root._probeRunning = false
+      Qt.callLater(root.drainProbes)
+      if (exitCode === 0) {
+        try {
+          var parsed = JSON.parse(String(accountTierStdout.text || "{}"))
+          if (typeof parsed.tier === "number") root.accountTier = parsed.tier
+        } catch (e) {
+          // leave accountTier as -1 (unknown) — servers.py's default
+          // (score-only, unchanged) behavior is the safe fallback.
+        }
+      }
+    }
+  }
+
+  Process {
     id: accountProcess
     running: false
     command: []
@@ -1418,12 +1468,14 @@ Item {
       if (info.signedIn && !was) {
         root.loadCountries(true)
         root.loadConfig()
+        root.loadAccountTier()
       }
       if (!info.signedIn) {
         root.countries = []
         root.countriesLoaded = false
         root.config = {}
         root.configLoaded = false
+        root.accountTier = -1
       }
     }
   }

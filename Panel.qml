@@ -698,6 +698,7 @@ Panel {
         gtkAppInstalled: vpn.gtkAppInstalled,
         accountProbed: vpn.accountProbed,
         signedIn: vpn.signedIn,
+        accountTier: vpn.accountTier,
         connected: vpn.connected,
         busy: vpn.busy,
         killSwitch: vpn.config["kill-switch"] || "",

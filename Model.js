@@ -241,6 +241,20 @@ function filterCountries(countries, query) {
   return out
 }
 
+// Which country codes have at least one Free (tier 0) city, from the same
+// worldwide cities list the map already loads — no extra CLI call. Lets the
+// country list flag a country as Free before you drill into it, rather than
+// only after: with ~150 countries and a handful actually Free, clicking each
+// one just to find out is not a real way to discover this.
+function freeCountryCodes(cities) {
+  var out = {}
+  for (var i = 0; i < (cities || []).length; i++) {
+    var c = cities[i]
+    if (c && c.tier === 0 && c.code) out[String(c.code).toUpperCase()] = true
+  }
+  return out
+}
+
 function elide(text, max) {
   var value = String(text || "").replace(/\s+/g, " ").trim()
   var limit = max || 140

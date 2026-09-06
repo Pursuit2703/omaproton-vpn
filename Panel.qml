@@ -272,6 +272,7 @@ Panel {
   ]
 
   readonly property var filteredCountries: Model.filterCountries(vpn.countries, filterQuery)
+  readonly property var freeCountryCodes: Model.freeCountryCodes(vpn.cities)
 
   // Offered once, until turned on or dismissed. The CLI ships with the kill
   // switch off, which means a dropped tunnel silently exposes the user.
@@ -1975,6 +1976,7 @@ Panel {
 
     readonly property bool isCurrent: vpn.connected && vpn.displayServer !== "" && country
                                       && vpn.displayServer.toUpperCase().indexOf(String(country.code).toUpperCase()) === 0
+    readonly property bool isFree: country && root.freeCountryCodes[String(country.code).toUpperCase()] === true
 
     hasCursor: root.cursorActive && root.focusSection === "countries" && root.countryIndex === rowIndex
     foreground: root.foreground
@@ -2012,6 +2014,21 @@ Panel {
           font.pixelSize: Style.font.body
           elide: Text.ElideRight
         }
+      }
+
+      Text {
+        // Free is the one thing worth knowing before you click into a
+        // country: ~150 are listed, a handful actually have a server this
+        // account can use, and the cost of finding out otherwise is
+        // drilling into each one. Cheap to show — freeCountryCodes comes
+        // from the cities list the map already loaded, no extra CLI call.
+        visible: countryRow.isFree
+        text: "Free"
+        textFormat: Text.PlainText
+        color: root.dim
+        font.family: root.fontFamily
+        font.pixelSize: Style.font.caption
+        Layout.alignment: Qt.AlignVCenter
       }
 
       Text {

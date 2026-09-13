@@ -11,6 +11,12 @@ terminal. Click the Proton mark and you're protected.
 
 *Live, and in your theme.*
 
+> This is a fork of [grichard99/omaproton-vpn](https://github.com/grichard99/omaproton-vpn)
+> with an added fix so Free-tier accounts can connect to a Free country,
+> city, or server directly instead of being blanket-refused. Install from
+> here if you want that fix; everything else below is unchanged from
+> upstream.
+
 ## Contents
 
 - [Why "Oma"](#why-oma)
@@ -80,7 +86,7 @@ That's it. The panel installs the Proton VPN CLI for you if it isn't there.
 ## Install
 
 ```bash
-omarchy plugin add https://github.com/grichard99/omaproton-vpn --enable
+omarchy plugin add https://github.com/Pursuit2703/omaproton-vpn --enable
 ```
 
 Then click the Proton mark in your bar. The panel walks you through the rest:

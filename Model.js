@@ -255,6 +255,21 @@ function freeCountryCodes(cities) {
   return out
 }
 
+// Free countries first, in their original order, then everything else —
+// still one flat list, so the existing keyboard cursor's index math over
+// filteredCountries needs no changes; the panel just draws a section
+// header at the boundary. Returns {ordered, freeCount}.
+function groupCountriesByFree(countries, freeCodes) {
+  var free = []
+  var other = []
+  for (var i = 0; i < (countries || []).length; i++) {
+    var c = countries[i]
+    if (c && freeCodes[String(c.code).toUpperCase()] === true) free.push(c)
+    else other.push(c)
+  }
+  return { ordered: free.concat(other), freeCount: free.length }
+}
+
 function elide(text, max) {
   var value = String(text || "").replace(/\s+/g, " ").trim()
   var limit = max || 140
